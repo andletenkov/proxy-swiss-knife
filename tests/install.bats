@@ -313,6 +313,39 @@ valid_inputs() {
   [[ "$output" == *"WebSocket and gRPC ports must be different"* ]]
 }
 
+@test "configure_subscription clears subDomain so 3x-ui accepts the panel-hosted subscription request" {
+  BASE_DOMAIN="example.com"
+  PANEL_SUBDOMAIN="admin"
+  SUB_PORT="2096"
+  SUB_PATH="/sub"
+  SS_LISTENING_PORTS="2096"
+  local update_body="${BATS_TEST_TMPDIR}/subscription-settings.json"
+
+  api_curl() {
+    case " $* " in
+      *" /panel/api/setting/all "*)
+        printf '%s' '{"success":true,"obj":{"subDomain":"old.example.com","subURI":"https://old.example.com/sub/"}}'
+        ;;
+      *" /panel/api/setting/update "*)
+        local arg next_is_body=""
+        for arg in "$@"; do
+          if [[ "$next_is_body" == "yes" ]]; then
+            printf '%s' "$arg" > "$update_body"
+            break
+          fi
+          [[ "$arg" == "-d" ]] && next_is_body="yes"
+        done
+        printf '%s' '{"success":true}'
+        ;;
+      *) printf '%s' '{"success":true}' ;;
+    esac
+  }
+
+  run configure_subscription
+  [ "$status" -eq 0 ]
+  python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); assert s["subDomain"] == ""; assert s["subURI"] == "https://admin.example.com/sub/"' "$update_body"
+}
+
 @test "validate_inputs rejects equal subscription and websocket ports" {
   valid_inputs
   SUB_PORT="$WS_PORT"

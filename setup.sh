@@ -2985,8 +2985,7 @@ configure_subscription() {
   current_settings="$(api_curl -X POST "${BASE_URL}/panel/api/setting/all")"
 
   local updated_settings
-  export CUR_SETTINGS="$current_settings" SUB_PORT_ARG="$SUB_PORT" SUB_PATH_ARG="$SUB_PATH" SUB_DOMAIN_ARG="${PANEL_SUBDOMAIN}.${BASE_DOMAIN}" \
-    HYSTERIA_DOMAIN_ARG="${HYSTERIA_SUBDOMAIN:+${HYSTERIA_SUBDOMAIN}.${BASE_DOMAIN}}"
+  export CUR_SETTINGS="$current_settings" SUB_PORT_ARG="$SUB_PORT" SUB_PATH_ARG="$SUB_PATH" SUB_DOMAIN_ARG="${PANEL_SUBDOMAIN}.${BASE_DOMAIN}"
   updated_settings="$(python3 << 'SUBEOF'
 import json,os,sys
 
@@ -3003,19 +3002,13 @@ settings['subListen'] = '127.0.0.1'
 if os.environ.get('SUB_DOMAIN_ARG'):
     sub_path = os.environ['SUB_PATH_ARG'].strip('/')
     settings['subURI'] = 'https://' + os.environ['SUB_DOMAIN_ARG'] + '/' + sub_path + '/'
-    # subDomain is a single, panel-wide fallback host that 3x-ui's own
-    # subscription-content generator substitutes for any inbound whose own
-    # `listen` isn't a real public address. Every VLESS-type inbound we
-    # create listens on 127.0.0.1 (proxied by Nginx), so 3x-ui derives
-    # their host correctly from the subscription request itself and needs
-    # no help here. Hysteria2 is the one exception -- it listens directly
-    # on 0.0.0.0 (no Nginx involved, plain UDP/QUIC) -- and 3x-ui has no
-    # request-derived host to fall back to for it, so without subDomain
-    # set it emits a useless 'localhost' as the share-link host. Set it
-    # only when Hysteria2 is enabled, to fix that one case without
-    # incorrectly overriding the (already-correct) host used by everything
-    # else.
-    settings['subDomain'] = os.environ.get('HYSTERIA_DOMAIN_ARG', '')
+    # In 3x-ui subDomain is a host allowlist for the subscription server,
+    # not just a display/link fallback. The subscription is reverse-proxied
+    # through PANEL_SUBDOMAIN, so setting this to Hysteria's separate domain
+    # makes 3x-ui reject the panel-hosted subscription with HTTP 403.
+    # Leave it empty to accept the reverse-proxy host. Hysteria's public host
+    # must be supplied per-inbound, not via this global setting.
+    settings['subDomain'] = ''
 print(json.dumps(settings))
 SUBEOF
   )" ||
