@@ -3344,28 +3344,27 @@ print_client_links() {
   echo "  Password: ${XUI_PASSWORD}"
   echo "  URL:      https://${PANEL_SUBDOMAIN}.${BASE_DOMAIN}${PANEL_PATH}/"
   echo
-  if [[ "$INSTALL_MODE" == "cdn" ]]; then
-    echo "=== Client VLESS URIs (ready to import into your client app) ==="
-    echo "vless://${CLIENT_UUID}@${VLESS_SUBDOMAIN}.${BASE_DOMAIN}:443?type=ws&security=tls&encryption=${VLESS_ENCRYPTION_CLIENT_KEY}&path=$(printf '%s' "$WS_PATH" | sed 's#/#%2F#g')&host=${VLESS_SUBDOMAIN}.${BASE_DOMAIN}#${INBOUND_REMARK_WS}"
-    echo "vless://${CLIENT_UUID}@${VLESS_SUBDOMAIN}.${BASE_DOMAIN}:443?type=grpc&security=tls&encryption=${VLESS_ENCRYPTION_CLIENT_KEY}&serviceName=${GRPC_SERVICE}&mode=gun&host=${VLESS_SUBDOMAIN}.${BASE_DOMAIN}#${INBOUND_REMARK_GRPC}"
-    echo "vless://${CLIENT_UUID}@${VLESS_SUBDOMAIN}.${BASE_DOMAIN}:443?type=xhttp&security=tls&encryption=${VLESS_ENCRYPTION_CLIENT_KEY}&flow=xtls-rprx-vision&path=$(printf '%s' "$XHTTP_PATH" | sed 's#/#%2F#g')&mode=packet-up&host=${VLESS_SUBDOMAIN}.${BASE_DOMAIN}#${INBOUND_REMARK_XHTTP}"
-  fi
+  # Every Xray-based transport (CDN VLESS WS/gRPC/XHTTP, Reality, Hysteria2)
+  # is deliberately NOT hand-assembled into a share link here. 3x-ui's own
+  # subscription service is the single source of truth for those -- it's
+  # generated straight from each inbound's real, live config, so it can
+  # never drift out of sync with what's actually running the way a
+  # hand-built URI duplicated here could. Add the subscription URL to any
+  # VLESS/Hysteria2-compatible client and it will list every Xray inbound.
+  echo "=== Subscription (all Xray-based connections: $([[ \"$INSTALL_MODE\" == \"cdn\" ]] && echo -n "WebSocket, gRPC, XHTTP" || echo -n "Reality, Hysteria2") -- generated live by 3x-ui, always accurate) ==="
+  echo "  URL: https://${PANEL_SUBDOMAIN}.${BASE_DOMAIN}${SUB_PATH}/"
+  echo "  Add this URL directly to your client app (v2rayN, NekoBox, Shadowrocket, etc.)"
+  echo "  -- it lists every Xray inbound above with its real, current settings."
 
   if [[ -n "$HYSTERIA_SUBDOMAIN" ]]; then
     echo
-    echo "=== Hysteria2 (direct UDP/QUIC) ==="
+    echo "=== Hysteria2 (direct UDP/QUIC) -- raw connection details ==="
     echo "  Server: ${HYSTERIA_SUBDOMAIN}.${BASE_DOMAIN}:${HYSTERIA_PORT}"
     echo "  Auth: ${HYSTERIA_AUTH}"
     echo "  Salamander password: ${HYSTERIA_OBFS_PASSWORD}"
     echo "  SNI: ${HYSTERIA_SUBDOMAIN}.${BASE_DOMAIN}"
     echo "  Note: Salamander disables normal HTTP/3 masquerading."
-    echo "hysteria2://${HYSTERIA_AUTH}@${HYSTERIA_SUBDOMAIN}.${BASE_DOMAIN}:${HYSTERIA_PORT}/?sni=${HYSTERIA_SUBDOMAIN}.${BASE_DOMAIN}&obfs=salamander&obfs-password=${HYSTERIA_OBFS_PASSWORD}#${INBOUND_REMARK_HYSTERIA:-$(detect_country_flag) Hysteria-Gecko}"
-  fi
-
-  if [[ -n "$REALITY_SUBDOMAIN" ]]; then
-    echo
-    echo "=== VLESS Reality (direct connection, no CDN) ==="
-    echo "vless://${CLIENT_UUID}@${REALITY_SUBDOMAIN}.${BASE_DOMAIN}:443?type=tcp&security=reality&pbk=${REALITY_PUBLIC_KEY}&fp=chrome&sni=${REALITY_DEST}&sid=${REALITY_SHORT_ID}&flow=xtls-rprx-vision&encryption=none#${INBOUND_REMARK_REALITY}"
+    echo "  (use the subscription above for a ready-to-import hysteria2:// link)"
   fi
 
   if [[ -n "$NAIVE_SUBDOMAIN" ]]; then

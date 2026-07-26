@@ -1084,101 +1084,62 @@ cf_real_ip_env() {
   [[ "$output" == *"https://admin.example.com/rand0mBaseP4th/"* ]]
 }
 
-@test "print_client_links emits WS, gRPC, and XHTTP VLESS URIs with TLS and correct host" {
-  CLIENT_UUID="11111111-2222-3333-4444-555555555555"
-  WS_PATH="/api/v1/events"
-  GRPC_SERVICE="api.v1.SyncService"
-  XHTTP_PATH="/api/v1/ingest/abcd1234"
-  INBOUND_REMARK_WS="ws-cdn"
-  INBOUND_REMARK_GRPC="grpc-cdn"
-  INBOUND_REMARK_XHTTP="xhttp-cdn"
-  VLESS_SUBDOMAIN="vpn"
+@test "print_client_links points to the subscription URL as the single source of truth for CDN Xray transports" {
+  INSTALL_MODE="cdn"
   BASE_DOMAIN="example.com"
   XUI_USERNAME="u"
   XUI_PASSWORD="p"
   PANEL_SUBDOMAIN="admin"
   PANEL_PATH="/admin"
-  VLESS_ENCRYPTION_CLIENT_KEY="mlkem768-client-stub"
+  SUB_PATH="/sub"
 
   run print_client_links
   [ "$status" -eq 0 ]
-
-  [[ "$output" == *"vless://11111111-2222-3333-4444-555555555555@vpn.example.com:443?type=ws&security=tls&encryption=mlkem768-client-stub&path=%2Fapi%2Fv1%2Fevents&host=vpn.example.com#ws-cdn"* ]]
-  [[ "$output" == *"vless://11111111-2222-3333-4444-555555555555@vpn.example.com:443?type=grpc&security=tls&encryption=mlkem768-client-stub&serviceName=api.v1.SyncService&mode=gun&host=vpn.example.com#grpc-cdn"* ]]
-  [[ "$output" == *"vless://11111111-2222-3333-4444-555555555555@vpn.example.com:443?type=xhttp&security=tls&encryption=mlkem768-client-stub&flow=xtls-rprx-vision&path=%2Fapi%2Fv1%2Fingest%2Fabcd1234&mode=packet-up&host=vpn.example.com#xhttp-cdn"* ]]
-
-  unique_uuid_count=$(printf '%s\n' "$output" \
-    | grep -oE '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}' \
-    | sort -u | wc -l | tr -d ' ')
-
-  [ "$unique_uuid_count" = "1" ]
+  [[ "$output" == *"=== Subscription (all Xray-based connections: WebSocket, gRPC, XHTTP -- generated live by 3x-ui, always accurate) ==="* ]]
+  [[ "$output" == *"URL: https://admin.example.com/sub/"* ]]
+  # No hand-built per-protocol vless:// URIs anymore -- the subscription
+  # URL above is the only source of truth for these.
+  [[ "$output" != *"vless://"* ]]
 }
 
-@test "print_client_links omits the Reality URI when disabled" {
-  CLIENT_UUID="11111111-2222-3333-4444-555555555555"
-  WS_PATH="/api/v1/events"
-  GRPC_SERVICE="api.v1.SyncService"
-  XHTTP_PATH="/api/v1/ingest/abcd1234"
-  INBOUND_REMARK_WS="ws-cdn"
-  INBOUND_REMARK_GRPC="grpc-cdn"
-  INBOUND_REMARK_XHTTP="xhttp-cdn"
-  VLESS_SUBDOMAIN="vpn"
+@test "print_client_links points to the subscription URL for Reality/Hysteria2 in no-cdn mode" {
+  INSTALL_MODE="no-cdn"
   BASE_DOMAIN="example.com"
   XUI_USERNAME="u"
   XUI_PASSWORD="p"
   PANEL_SUBDOMAIN="admin"
   PANEL_PATH="/admin"
-  VLESS_ENCRYPTION_CLIENT_KEY="mlkem768-client-stub"
-  REALITY_SUBDOMAIN=""
+  SUB_PATH="/sub"
+  REALITY_SUBDOMAIN="reality"
 
   run print_client_links
   [ "$status" -eq 0 ]
+  [[ "$output" == *"=== Subscription (all Xray-based connections: Reality, Hysteria2 -- generated live by 3x-ui, always accurate) ==="* ]]
+  [[ "$output" == *"URL: https://admin.example.com/sub/"* ]]
+  [[ "$output" != *"vless://"* ]]
   [[ "$output" != *"security=reality"* ]]
 }
 
-@test "print_client_links emits a Reality VLESS URI when enabled" {
-  CLIENT_UUID="11111111-2222-3333-4444-555555555555"
-  WS_PATH="/api/v1/events"
-  GRPC_SERVICE="api.v1.SyncService"
-  XHTTP_PATH="/api/v1/ingest/abcd1234"
-  INBOUND_REMARK_WS="ws-cdn"
-  INBOUND_REMARK_GRPC="grpc-cdn"
-  INBOUND_REMARK_XHTTP="xhttp-cdn"
-  VLESS_SUBDOMAIN="vpn"
+@test "print_client_links shows raw Hysteria2 connection details but no hand-built hysteria2:// URI" {
+  INSTALL_MODE="no-cdn"
   BASE_DOMAIN="example.com"
   XUI_USERNAME="u"
   XUI_PASSWORD="p"
   PANEL_SUBDOMAIN="admin"
   PANEL_PATH="/admin"
-  VLESS_ENCRYPTION_CLIENT_KEY="mlkem768-client-stub"
-  REALITY_SUBDOMAIN="reality"
-  REALITY_DEST="github.com"
-  REALITY_PUBLIC_KEY="reality-pub-stub"
-  REALITY_SHORT_ID="abcd1234"
-  INBOUND_REMARK_REALITY="reality-remark"
-
-  run print_client_links
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"=== VLESS Reality (direct connection, no CDN) ==="* ]]
-  [[ "$output" == *"vless://11111111-2222-3333-4444-555555555555@reality.example.com:443?type=tcp&security=reality&pbk=reality-pub-stub&fp=chrome&sni=github.com&sid=abcd1234&flow=xtls-rprx-vision#reality-remark"* ]]
-}
-
-@test "print_client_links emits a hysteria2:// URI when enabled" {
-  BASE_DOMAIN="example.com"
-  XUI_USERNAME="u"
-  XUI_PASSWORD="p"
-  PANEL_SUBDOMAIN="admin"
-  PANEL_PATH="/admin"
+  SUB_PATH="/sub"
   HYSTERIA_SUBDOMAIN="hy2"
   HYSTERIA_PORT="443"
   HYSTERIA_AUTH="authsecret"
   HYSTERIA_OBFS_PASSWORD="obfssecret"
-  INBOUND_REMARK_HYSTERIA="hysteria-remark"
 
   run print_client_links
   [ "$status" -eq 0 ]
-  [[ "$output" == *"=== Hysteria2 (direct UDP/QUIC) ==="* ]]
-  [[ "$output" == *"hysteria2://authsecret@hy2.example.com:443/?sni=hy2.example.com&obfs=salamander&obfs-password=obfssecret#hysteria-remark"* ]]
+  [[ "$output" == *"=== Hysteria2 (direct UDP/QUIC) -- raw connection details ==="* ]]
+  [[ "$output" == *"Server: hy2.example.com:443"* ]]
+  [[ "$output" == *"Auth: authsecret"* ]]
+  [[ "$output" == *"Salamander password: obfssecret"* ]]
+  [[ "$output" != *"hysteria2://"* ]]
 }
 
 @test "print_client_links prints NaiveProxy connection info when enabled" {
