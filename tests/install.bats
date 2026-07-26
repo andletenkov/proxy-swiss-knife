@@ -1336,13 +1336,14 @@ cf_real_ip_env() {
   MIERU_PORTS="853:TCP,123:UDP"
   MIERU_USERNAME="mieru-user"
   MIERU_PASSWORD="mieru-password"
+  VPS_COUNTRY_CODE="EE"
 
   run print_client_links
   [ "$status" -eq 0 ]
   [[ "$output" == *"=== Karing proxy config (YAML) ==="* ]]
-  [[ "$output" == *$'  - name: NaiveProxy\n    type: naive\n    server: naive.example.com\n    port: 443\n    transport: TCP\n    udp: true\n    username: naive-user\n    password: naive-password\n    multiplexing: MULTIPLEXING_HIGH'* ]]
-  [[ "$output" == *$'  - name: mieru-tcp-853\n    type: mieru\n    server: mieru.example.com\n    port: 853\n    transport: TCP'* ]]
-  [[ "$output" == *$'  - name: mieru-udp-123\n    type: mieru\n    server: mieru.example.com\n    port: 123\n    transport: UDP'* ]]
+  [[ "$output" == *$'  - name: "🇪🇪 NaiveProxy (naive.example.com:443)"\n    type: naive\n    server: naive.example.com\n    port: 443\n    transport: TCP\n    udp: true\n    username: naive-user\n    password: naive-password\n    multiplexing: MULTIPLEXING_HIGH'* ]]
+  [[ "$output" == *$'  - name: "🇪🇪 Mieru TCP (mieru.example.com:853)"\n    type: mieru\n    server: mieru.example.com\n    port: 853\n    transport: TCP'* ]]
+  [[ "$output" == *$'  - name: "🇪🇪 Mieru UDP (mieru.example.com:123)"\n    type: mieru\n    server: mieru.example.com\n    port: 123\n    transport: UDP'* ]]
 }
 
 @test "print_client_links omits the NaiveProxy section when disabled" {

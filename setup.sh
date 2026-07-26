@@ -3524,11 +3524,13 @@ print_client_links() {
   fi
 
   if [[ -n "$NAIVE_SUBDOMAIN" || -n "$MIERU_SUBDOMAIN" ]]; then
+    local karing_flag
+    karing_flag="$(detect_country_flag)"
     echo
     echo "=== Karing proxy config (YAML) ==="
     echo "proxies:"
     if [[ -n "$NAIVE_SUBDOMAIN" ]]; then
-      echo "  - name: NaiveProxy"
+      echo "  - name: \"${karing_flag} NaiveProxy (${NAIVE_SUBDOMAIN}.${BASE_DOMAIN}:443)\""
       echo "    type: naive"
       echo "    server: ${NAIVE_SUBDOMAIN}.${BASE_DOMAIN}"
       echo "    port: 443"
@@ -3543,7 +3545,7 @@ print_client_links() {
       for karing_mieru_binding in ${MIERU_PORTS//,/ }; do
         karing_mieru_port="${karing_mieru_binding%%:*}"
         karing_mieru_transport="${karing_mieru_binding#*:}"
-        echo "  - name: mieru-${karing_mieru_transport,,}-${karing_mieru_port}"
+        echo "  - name: \"${karing_flag} Mieru ${karing_mieru_transport} (${MIERU_SUBDOMAIN}.${BASE_DOMAIN}:${karing_mieru_port})\""
         echo "    type: mieru"
         echo "    server: ${MIERU_SUBDOMAIN}.${BASE_DOMAIN}"
         echo "    port: ${karing_mieru_port}"
