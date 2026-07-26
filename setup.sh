@@ -741,9 +741,14 @@ collect_input() {
   local default_grpc_port=""
   local default_xhttp_port=""
 
-  echo
-  echo "=== VLESS + Nginx Setup ==="
-  echo
+  cat <<'BANNER'
+
+  PROXY SWISS KNIFE
+  ==================
+  >----------------====[]
+     one script. every transport. no hand-wiring.
+
+BANNER
 
   prompt_install_mode
   prompt BASE_DOMAIN "Base domain, for example example.com" "$BASE_DOMAIN"
