@@ -1576,11 +1576,25 @@ print_summary_env() {
   [[ "$output" == *'"none" "xtls-rprx-vision"'* ]]
 }
 
-@test "run_xui_install_and_inbounds calls ensure_reality_keys, ensure_reality_inbound and ensure_reality_host" {
+@test "ensure_hysteria_host advertises the public Hysteria2 host through 3x-ui's Hosts API" {
   local installer="${BATS_TEST_DIRNAME}/../setup.sh"
 
-  run grep -A16 '^run_xui_install_and_inbounds()' "$installer"
+  run grep -A45 '^ensure_hysteria_host()' "$installer"
   [ "$status" -eq 0 ]
+  [[ "$output" == *'/panel/api/hosts/byInbound/'* ]]
+  [[ "$output" == *'/panel/api/hosts/add'* ]]
+  [[ "$output" == *'HOST_ADDRESS="${HYSTERIA_SUBDOMAIN}.${BASE_DOMAIN}"'* ]]
+  [[ "$output" == *"'port': 443"* ]]
+  [[ "$output" == *"'security': 'same'"* ]]
+}
+
+@test "run_xui_install_and_inbounds calls Hysteria2 and Reality Host overrides" {
+  local installer="${BATS_TEST_DIRNAME}/../setup.sh"
+
+  run grep -A17 '^run_xui_install_and_inbounds()' "$installer"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ensure_hysteria_inbound"* ]]
+  [[ "$output" == *"ensure_hysteria_host"* ]]
   [[ "$output" == *"ensure_reality_keys"* ]]
   [[ "$output" == *"ensure_reality_inbound"* ]]
   [[ "$output" == *"ensure_reality_host"* ]]

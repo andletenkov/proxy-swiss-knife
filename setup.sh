@@ -2914,6 +2914,51 @@ sys.exit(1)
 # inbound's actual config (see github.com/MHSanaei/3x-ui/issues/5143 for the
 # analogous externalProxy-driven variant of this failure mode). Idempotent:
 # skips creation if a host already exists for this inbound.
+ensure_hysteria_host() {
+  [[ -n "$HYSTERIA_SUBDOMAIN" ]] || return 0
+
+  local tag="in-${HYSTERIA_PORT}-hysteria" inbound_id
+  inbound_id="$(xui_get_inbound_id "$tag")" ||
+    die "Could not resolve inbound id for '${tag}' while configuring its Host override."
+
+  local existing_resp
+  existing_resp="$(api_curl -X GET "${BASE_URL}/panel/api/hosts/byInbound/${inbound_id}")"
+  if python3 -c "
+import json,sys
+try:
+    obj = json.loads(sys.argv[1]).get('obj') or []
+except Exception:
+    obj = []
+sys.exit(0 if len(obj) > 0 else 1)
+" "$existing_resp"; then
+    echo "Host override for '${tag}' already exists, skipping creation." >&2
+    return
+  fi
+
+  local body resp
+  export HOST_INBOUND_ID="$inbound_id" HOST_ADDRESS="${HYSTERIA_SUBDOMAIN}.${BASE_DOMAIN}"
+  body="$(python3 << 'HOSTEOF'
+import json,os
+print(json.dumps({
+    'inboundIds': [int(os.environ['HOST_INBOUND_ID'])],
+    'remark': 'Hysteria2 direct',
+    'port': 443,
+    'security': 'same',
+    'hosts': [os.environ['HOST_ADDRESS']],
+}))
+HOSTEOF
+  )"
+  resp="$(api_curl -X POST "${BASE_URL}/panel/api/hosts/add" \
+    -H 'Content-Type: application/json' -d "$body")"
+  python3 -c "
+import json,sys
+try:
+    sys.exit(0 if json.loads(sys.argv[1]).get('success') else 1)
+except Exception:
+    sys.exit(1)
+" "$resp" || die "Failed to create Host override for '${tag}'. Response: ${resp}"
+}
+
 ensure_reality_host() {
   [[ -n "$REALITY_SUBDOMAIN" ]] || return 0
 
@@ -3002,12 +3047,6 @@ settings['subListen'] = '127.0.0.1'
 if os.environ.get('SUB_DOMAIN_ARG'):
     sub_path = os.environ['SUB_PATH_ARG'].strip('/')
     settings['subURI'] = 'https://' + os.environ['SUB_DOMAIN_ARG'] + '/' + sub_path + '/'
-    # In 3x-ui subDomain is a host allowlist for the subscription server,
-    # not just a display/link fallback. The subscription is reverse-proxied
-    # through PANEL_SUBDOMAIN, so setting this to Hysteria's separate domain
-    # makes 3x-ui reject the panel-hosted subscription with HTTP 403.
-    # Leave it empty to accept the reverse-proxy host. Hysteria's public host
-    # must be supplied per-inbound, not via this global setting.
     settings['subDomain'] = ''
 print(json.dumps(settings))
 SUBEOF
@@ -3272,6 +3311,7 @@ run_xui_install_and_inbounds() {
     ensure_grpc_inbound
   else
     ensure_hysteria_inbound
+    ensure_hysteria_host
     ensure_reality_keys
     ensure_reality_inbound
     ensure_reality_host
