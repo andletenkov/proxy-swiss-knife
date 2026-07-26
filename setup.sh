@@ -741,29 +741,34 @@ collect_input() {
   SUB_PORT="${SUB_PORT:-$(random_free_port "443")}"
   validate_port "Subscription port" "$SUB_PORT"
 
-  default_ws_port="${WS_PORT:-$(random_free_port "$SUB_PORT")}"
-  default_grpc_port="${GRPC_PORT:-$(random_free_port "$SUB_PORT" "$default_ws_port")}"
-  default_xhttp_port="${XHTTP_PORT:-$(random_free_port "$SUB_PORT" "$default_ws_port" "$default_grpc_port")}"
+  # WebSocket/gRPC/XHTTP are CDN-fronted VLESS transports; no-cdn mode never
+  # creates their inbounds (see run_xui_install_and_inbounds), so skip
+  # collecting ports for them there instead of prompting for unused values.
+  if [[ "$INSTALL_MODE" == "cdn" ]]; then
+    default_ws_port="${WS_PORT:-$(random_free_port "$SUB_PORT")}"
+    default_grpc_port="${GRPC_PORT:-$(random_free_port "$SUB_PORT" "$default_ws_port")}"
+    default_xhttp_port="${XHTTP_PORT:-$(random_free_port "$SUB_PORT" "$default_ws_port" "$default_grpc_port")}"
 
-  prompt WS_PORT "WebSocket local port" "$default_ws_port"
-  validate_port "WebSocket port" "$WS_PORT"
+    prompt WS_PORT "WebSocket local port" "$default_ws_port"
+    validate_port "WebSocket port" "$WS_PORT"
 
-  if port_is_listening "$WS_PORT"; then
-    echo "WARNING: port ${WS_PORT} is already in use by another process on this host." >&2
-  fi
+    if port_is_listening "$WS_PORT"; then
+      echo "WARNING: port ${WS_PORT} is already in use by another process on this host." >&2
+    fi
 
-  prompt GRPC_PORT "gRPC local port" "$default_grpc_port"
-  validate_port "gRPC port" "$GRPC_PORT"
+    prompt GRPC_PORT "gRPC local port" "$default_grpc_port"
+    validate_port "gRPC port" "$GRPC_PORT"
 
-  if port_is_listening "$GRPC_PORT"; then
-    echo "WARNING: port ${GRPC_PORT} is already in use by another process on this host." >&2
-  fi
+    if port_is_listening "$GRPC_PORT"; then
+      echo "WARNING: port ${GRPC_PORT} is already in use by another process on this host." >&2
+    fi
 
-  prompt XHTTP_PORT "XHTTP local port" "$default_xhttp_port"
-  validate_port "XHTTP port" "$XHTTP_PORT"
+    prompt XHTTP_PORT "XHTTP local port" "$default_xhttp_port"
+    validate_port "XHTTP port" "$XHTTP_PORT"
 
-  if port_is_listening "$XHTTP_PORT"; then
-    echo "WARNING: port ${XHTTP_PORT} is already in use by another process on this host." >&2
+    if port_is_listening "$XHTTP_PORT"; then
+      echo "WARNING: port ${XHTTP_PORT} is already in use by another process on this host." >&2
+    fi
   fi
 
   # Reserve the panel port here too, BEFORE 3x-ui is installed, so it cannot
