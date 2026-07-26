@@ -73,7 +73,7 @@ HYSTERIA_OBFS_PASSWORD=""
 # this fixed candidate list is NOT user-configurable by design; the whole
 # point is specific, plausible port numbers, not a random or open-ended set.
 # Each entry is its own mita portBindings entry sharing the same user.
-MIERU_CANDIDATE_PORTS=("53:UDP" "853:TCP" "993:TCP" "8443:TCP")
+MIERU_CANDIDATE_PORTS=("53:UDP" "123:UDP" "4500:UDP" "853:TCP" "993:TCP" "8443:TCP")
 MIERU_SUBDOMAIN=""
 # Comma-separated "port:protocol" list actually configured on this host --
 # a subset of MIERU_CANDIDATE_PORTS with any host-local collisions removed.
