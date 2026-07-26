@@ -1614,7 +1614,8 @@ print_summary_env() {
   [[ "$output" == *"'listen': '0.0.0.0'"* ]]
   [[ "$output" == *"'protocol': 'hysteria'"* ]]
   [[ "$output" == *"'type': 'salamander'"* ]]
-  [[ "$output" == *"Hysteria-Gecko"* ]]
+  [[ "$output" == *"Hysteria2-Salamander"* ]]
+  [[ "$output" != *"packetSize"* ]]
   [[ "$output" == *"'echServerKeys': ''"* ]]
 }
 

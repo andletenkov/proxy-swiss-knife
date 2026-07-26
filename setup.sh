@@ -2734,7 +2734,7 @@ ensure_hysteria_inbound() {
   [[ -n "$HYSTERIA_SUBDOMAIN" ]] || return 0
 
   local tag="in-${HYSTERIA_PORT}-hysteria" remark=""
-  remark="${INBOUND_REMARK_HYSTERIA:-$(detect_country_flag) Hysteria-Gecko}"
+  remark="${INBOUND_REMARK_HYSTERIA:-$(detect_country_flag) Hysteria2-Salamander}"
   if xui_inbound_exists "$tag"; then
     xui_sync_inbound_remark "$tag" "$remark"
     echo "Inbound '${tag}' already exists, skipping creation." >&2
@@ -2778,7 +2778,7 @@ print(json.dumps({
       'settings': {'fingerprint': 'chrome', 'echConfigList': '',
                    'pinnedPeerCertSha256': [], 'verifyPeerCertByName': ''},
     },
-    'finalmask': {'udp': [{'type': 'salamander', 'settings': {'password': os.environ['HYSTERIA_OBFS_ARG'], 'packetSize': '512-1200'}}]},
+    'finalmask': {'udp': [{'type': 'salamander', 'settings': {'password': os.environ['HYSTERIA_OBFS_ARG']}}]},
   },
   'sniffing': {'enabled': True, 'destOverride': ['http', 'tls', 'quic']},
 }))
