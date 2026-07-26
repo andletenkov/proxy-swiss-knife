@@ -3522,6 +3522,39 @@ print_client_links() {
     done
     echo "    {\"profiles\":[{\"profileName\":\"default\",\"servers\":[{\"ipAddress\":\"${MIERU_SUBDOMAIN}.${BASE_DOMAIN}\",\"portBindings\":[${client_bindings_json}]}],\"user\":{\"name\":\"${MIERU_USERNAME}\",\"password\":\"${MIERU_PASSWORD}\"},\"mtu\":1400}],\"activeProfile\":\"default\"}"
   fi
+
+  if [[ -n "$NAIVE_SUBDOMAIN" || -n "$MIERU_SUBDOMAIN" ]]; then
+    echo
+    echo "=== Karing proxy config (YAML) ==="
+    echo "proxies:"
+    if [[ -n "$NAIVE_SUBDOMAIN" ]]; then
+      echo "  - name: NaiveProxy"
+      echo "    type: naive"
+      echo "    server: ${NAIVE_SUBDOMAIN}.${BASE_DOMAIN}"
+      echo "    port: 443"
+      echo "    transport: TCP"
+      echo "    udp: true"
+      echo "    username: ${NAIVE_USERNAME}"
+      echo "    password: ${NAIVE_PASSWORD}"
+      echo "    multiplexing: MULTIPLEXING_HIGH"
+    fi
+    if [[ -n "$MIERU_SUBDOMAIN" ]]; then
+      local karing_mieru_binding karing_mieru_port karing_mieru_transport
+      for karing_mieru_binding in ${MIERU_PORTS//,/ }; do
+        karing_mieru_port="${karing_mieru_binding%%:*}"
+        karing_mieru_transport="${karing_mieru_binding#*:}"
+        echo "  - name: mieru-${karing_mieru_transport,,}-${karing_mieru_port}"
+        echo "    type: mieru"
+        echo "    server: ${MIERU_SUBDOMAIN}.${BASE_DOMAIN}"
+        echo "    port: ${karing_mieru_port}"
+        echo "    transport: ${karing_mieru_transport}"
+        echo "    udp: true"
+        echo "    username: ${MIERU_USERNAME}"
+        echo "    password: ${MIERU_PASSWORD}"
+        echo "    multiplexing: MULTIPLEXING_HIGH"
+      done
+    fi
+  fi
 }
 
 verify_deployment() {

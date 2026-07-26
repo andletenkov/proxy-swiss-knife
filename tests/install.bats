@@ -1320,6 +1320,31 @@ cf_real_ip_env() {
   [[ "$output" == *"https://user_abcd1234:supersecretpassword@naive.example.com"* ]]
 }
 
+@test "print_client_links emits Karing YAML for NaiveProxy and every mieru port" {
+  INSTALL_MODE="no-cdn"
+  BASE_DOMAIN="example.com"
+  XUI_USERNAME="u"
+  XUI_PASSWORD="p"
+  PANEL_SUBDOMAIN="admin"
+  PANEL_PATH="/admin"
+  SUB_PATH="/sub"
+  CLIENT_SUB_ID="client-sub-id"
+  NAIVE_SUBDOMAIN="naive"
+  NAIVE_USERNAME="naive-user"
+  NAIVE_PASSWORD="naive-password"
+  MIERU_SUBDOMAIN="mieru"
+  MIERU_PORTS="853:TCP,123:UDP"
+  MIERU_USERNAME="mieru-user"
+  MIERU_PASSWORD="mieru-password"
+
+  run print_client_links
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"=== Karing proxy config (YAML) ==="* ]]
+  [[ "$output" == *$'  - name: NaiveProxy\n    type: naive\n    server: naive.example.com\n    port: 443\n    transport: TCP\n    udp: true\n    username: naive-user\n    password: naive-password\n    multiplexing: MULTIPLEXING_HIGH'* ]]
+  [[ "$output" == *$'  - name: mieru-tcp-853\n    type: mieru\n    server: mieru.example.com\n    port: 853\n    transport: TCP'* ]]
+  [[ "$output" == *$'  - name: mieru-udp-123\n    type: mieru\n    server: mieru.example.com\n    port: 123\n    transport: UDP'* ]]
+}
+
 @test "print_client_links omits the NaiveProxy section when disabled" {
   CLIENT_UUID="11111111-2222-3333-4444-555555555555"
   WS_PATH="/api/v1/events"
