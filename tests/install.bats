@@ -1712,6 +1712,55 @@ EOF
   [[ "$output" == *"different from the panel subdomain"* ]]
 }
 
+@test "validate_inputs accepts a mieru subdomain equal to the Reality subdomain (mieru bypasses the SNI Guard)" {
+  valid_inputs
+  REALITY_SUBDOMAIN="reality"
+  REALITY_DEST="github.com"
+  REALITY_PORT="20000"
+  MIERU_SUBDOMAIN="reality"
+  MIERU_PORTS="41000:UDP,41000:TCP"
+  run validate_inputs
+  [ "$status" -eq 0 ]
+}
+
+@test "validate_inputs accepts a mieru subdomain equal to the NaiveProxy subdomain (mieru bypasses the SNI Guard)" {
+  valid_inputs
+  NAIVE_SUBDOMAIN="naive"
+  NAIVE_PORT="21000"
+  MIERU_SUBDOMAIN="naive"
+  MIERU_PORTS="41000:UDP,41000:TCP"
+  run validate_inputs
+  [ "$status" -eq 0 ]
+}
+
+@test "validate_inputs accepts a mieru subdomain equal to the Hysteria2 subdomain" {
+  valid_inputs
+  HYSTERIA_SUBDOMAIN="hy2"
+  HYSTERIA_PORT="443"
+  MIERU_SUBDOMAIN="hy2"
+  MIERU_PORTS="41000:UDP,41000:TCP"
+  run validate_inputs
+  [ "$status" -eq 0 ]
+}
+
+@test "validate_inputs rejects a mieru subdomain equal to the panel subdomain" {
+  valid_inputs
+  MIERU_SUBDOMAIN="$PANEL_SUBDOMAIN"
+  MIERU_PORTS="41000:UDP,41000:TCP"
+  run validate_inputs
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"different from the panel subdomain"* ]]
+}
+
+@test "validate_inputs rejects a mieru subdomain equal to the VLESS subdomain" {
+  valid_inputs
+  MIERU_SUBDOMAIN="$VLESS_SUBDOMAIN"
+  MIERU_PORTS="41000:UDP,41000:TCP"
+  run validate_inputs
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"different from the VLESS subdomain"* ]]
+}
+
 @test "validate_inputs rejects a NaiveProxy subdomain equal to the Reality subdomain" {
   valid_inputs
   REALITY_SUBDOMAIN="reality"

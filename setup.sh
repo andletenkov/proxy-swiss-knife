@@ -609,8 +609,14 @@ validate_inputs() {
   fi
 
   # mieru is entirely optional -- a blank MIERU_SUBDOMAIN disables it. Unlike
-  # Reality/NaiveProxy it has no TLS/SNI layer, so it gets its own dedicated
-  # public port rather than sharing 443 via the SNI Guard.
+  # Reality/NaiveProxy it has no TLS/SNI layer at all -- it never goes
+  # through the Nginx stream{} SNI Guard, instead getting its own dedicated,
+  # fixed public port(s). So, unlike Reality vs. NaiveProxy (which share one
+  # SNI lookup table on TCP 443 and therefore MUST use distinct subdomains),
+  # mieru cannot collide with Reality/NaiveProxy/Hysteria2 at the network
+  # level and is free to reuse one of their subdomains if desired. It still
+  # must differ from the panel/VLESS subdomains so client-facing config
+  # output and DNS records stay unambiguous.
   if [[ -n "$MIERU_SUBDOMAIN" ]]; then
     [[ "$MIERU_SUBDOMAIN" =~ ^[A-Za-z0-9-]+$ ]] ||
       die "Invalid mieru subdomain."
@@ -620,15 +626,6 @@ validate_inputs() {
 
     [[ "$MIERU_SUBDOMAIN" != "$VLESS_SUBDOMAIN" ]] ||
       die "mieru subdomain must be different from the VLESS subdomain."
-
-    [[ -z "$REALITY_SUBDOMAIN" || "$MIERU_SUBDOMAIN" != "$REALITY_SUBDOMAIN" ]] ||
-      die "mieru subdomain must be different from the Reality subdomain."
-
-    [[ -z "$NAIVE_SUBDOMAIN" || "$MIERU_SUBDOMAIN" != "$NAIVE_SUBDOMAIN" ]] ||
-      die "mieru subdomain must be different from the NaiveProxy subdomain."
-
-    [[ -z "$HYSTERIA_SUBDOMAIN" || "$MIERU_SUBDOMAIN" != "$HYSTERIA_SUBDOMAIN" ]] ||
-      die "mieru subdomain must be different from the Hysteria2 subdomain."
 
     [[ -n "$MIERU_PORTS" ]] ||
       die "MIERU_SUBDOMAIN is set but MIERU_PORTS is empty -- every candidate port collided with another reserved port on this host."
@@ -905,9 +902,12 @@ collect_input() {
   echo "it authenticates with a username/password. Instead of one random"
   echo "ephemeral port (itself a probe-worthy anomaly with no TLS to explain it),"
   echo "it listens on several fixed, deliberately unremarkable ports: ${MIERU_CANDIDATE_PORTS[*]}."
+  echo "It never shares Nginx's SNI Guard, so -- unlike Reality/NaiveProxy, which"
+  echo "must use distinct subdomains from each other -- mieru's subdomain may"
+  echo "safely reuse the same one you gave Reality, NaiveProxy, or Hysteria2."
   echo "Leave the subdomain blank to skip it."
   echo
-  clear_stale_subdomain_default MIERU_SUBDOMAIN "$PANEL_SUBDOMAIN" "$VLESS_SUBDOMAIN" "$REALITY_SUBDOMAIN" "$NAIVE_SUBDOMAIN" "$HYSTERIA_SUBDOMAIN"
+  clear_stale_subdomain_default MIERU_SUBDOMAIN "$PANEL_SUBDOMAIN" "$VLESS_SUBDOMAIN"
   prompt_optional MIERU_SUBDOMAIN "mieru subdomain (DNS-only, e.g. mieru)" "$MIERU_SUBDOMAIN"
 
   if [[ -n "$MIERU_SUBDOMAIN" ]]; then
