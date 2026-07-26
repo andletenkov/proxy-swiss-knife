@@ -3349,6 +3349,8 @@ print_client_links() {
   fi
 
   if [[ -n "$REALITY_SUBDOMAIN" ]]; then
+    echo
+    echo "=== VLESS Reality (direct connection, no CDN) ==="
     echo "vless://${CLIENT_UUID}@${REALITY_SUBDOMAIN}.${BASE_DOMAIN}:443?type=tcp&security=reality&pbk=${REALITY_PUBLIC_KEY}&fp=chrome&sni=${REALITY_DEST}&sid=${REALITY_SHORT_ID}&flow=xtls-rprx-vision&encryption=none#${INBOUND_REMARK_REALITY}"
   fi
 
@@ -3459,14 +3461,16 @@ verify_deployment() {
       all_ok=false
     fi
 
-    local vless_status
-    vless_status="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 "https://${vless_domain}/" || echo "000")"
+    if [[ "$INSTALL_MODE" == "cdn" ]]; then
+      local vless_status
+      vless_status="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 "https://${vless_domain}/" || echo "000")"
 
-    if [[ "$vless_status" =~ ^[0-9][0-9][0-9]$ && "$vless_status" != "000" ]]; then
-      echo "  [OK]   TLS handshake to https://${vless_domain}/ succeeded (HTTP ${vless_status}, 404 is expected here)"
-    else
-      echo "  [FAIL] Could not complete a TLS handshake to https://${vless_domain}/"
-      all_ok=false
+      if [[ "$vless_status" =~ ^[0-9][0-9][0-9]$ && "$vless_status" != "000" ]]; then
+        echo "  [OK]   TLS handshake to https://${vless_domain}/ succeeded (HTTP ${vless_status}, 404 is expected here)"
+      else
+        echo "  [FAIL] Could not complete a TLS handshake to https://${vless_domain}/"
+        all_ok=false
+      fi
     fi
 
     if [[ -n "$NAIVE_SUBDOMAIN" ]]; then

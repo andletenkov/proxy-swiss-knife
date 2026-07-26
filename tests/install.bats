@@ -1159,6 +1159,7 @@ cf_real_ip_env() {
 
   run print_client_links
   [ "$status" -eq 0 ]
+  [[ "$output" == *"=== VLESS Reality (direct connection, no CDN) ==="* ]]
   [[ "$output" == *"vless://11111111-2222-3333-4444-555555555555@reality.example.com:443?type=tcp&security=reality&pbk=reality-pub-stub&fp=chrome&sni=github.com&sid=abcd1234&flow=xtls-rprx-vision#reality-remark"* ]]
 }
 
@@ -1282,6 +1283,21 @@ verify_deployment_env() {
   run verify_deployment
   [ "$status" -eq 0 ]
   [[ "$output" == *"[OK]   https://naive.example.com/ responded with HTTP 200"* ]]
+}
+
+@test "verify_deployment skips the VLESS TLS handshake check in no-cdn mode (VLESS_SUBDOMAIN is blank there)" {
+  verify_deployment_env
+  INSTALL_MODE="no-cdn"
+  VLESS_SUBDOMAIN=""
+  REALITY_SUBDOMAIN="reality"
+  REALITY_PORT="20000"
+  export SS_LISTENING_PORTS="2053 2096 20000"
+  export CURL_HTTP_CODE="200"
+
+  run verify_deployment
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"TLS handshake"* ]]
+  [[ "$output" != *"https://.example.com/"* ]]
 }
 
 # ---------------------------------------------------------------------------
