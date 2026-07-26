@@ -993,6 +993,37 @@ cf_real_ip_env() {
   [[ "$output" == *"filled-in"* ]]
 }
 
+@test "prompt_install_mode always asks, even when CDN_MODE is already persisted" {
+  run bash -c '
+    source "'"$SCRIPT"'" >/dev/null 2>&1 || true
+    CDN_MODE="false"
+    printf "true\n" | prompt_install_mode
+    echo "[$CDN_MODE][$INSTALL_MODE]"
+  '
+  [[ "$output" == *"Use CDN inbounds? [false]:"* ]]
+  [[ "$output" == *"[true][cdn]"* ]]
+}
+
+@test "prompt_install_mode keeps the persisted CDN_MODE when input is empty (Enter to accept)" {
+  run bash -c '
+    source "'"$SCRIPT"'" >/dev/null 2>&1 || true
+    CDN_MODE="false"
+    printf "\n" | prompt_install_mode
+    echo "[$CDN_MODE][$INSTALL_MODE]"
+  '
+  [[ "$output" == *"[false][no-cdn]"* ]]
+}
+
+@test "prompt_install_mode re-asks on an invalid value instead of accepting it" {
+  run bash -c '
+    source "'"$SCRIPT"'" >/dev/null 2>&1 || true
+    printf "maybe\ntrue\n" | prompt_install_mode
+    echo "[$CDN_MODE][$INSTALL_MODE]"
+  '
+  [[ "$output" == *"Enter a true/false-compatible value"* ]]
+  [[ "$output" == *"[true][cdn]"* ]]
+}
+
 @test "prompt_optional leaves the variable blank when input is empty and there is no default" {
   run bash -c '
     source "'"$SCRIPT"'" >/dev/null 2>&1 || true

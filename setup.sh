@@ -299,20 +299,28 @@ normalize_cdn_mode() {
   esac
 }
 
+# Always asks and always shows the current CDN_MODE (persisted or
+# newly-typed) as the default, exactly like prompt() -- switching between
+# cdn/no-cdn is a fundamentally different install, so it must never be
+# silently reused without at least a visible confirm-or-Enter-to-keep step.
 prompt_install_mode() {
-  local value="${CDN_MODE}" normalized=""
+  local value="" normalized=""
 
   while true; do
+    if [[ -n "$CDN_MODE" ]] && normalize_cdn_mode "$CDN_MODE" >/dev/null; then
+      read -r -p "Use CDN inbounds? [${CDN_MODE}]: " value
+      value="${value:-$CDN_MODE}"
+    else
+      read -r -p "Use CDN inbounds? [true/false]: " value
+    fi
+
     if normalized="$(normalize_cdn_mode "$value")"; then
       CDN_MODE="$value"
       INSTALL_MODE="$normalized"
       return
     fi
 
-    if [[ -n "$value" ]]; then
-      echo "Enter a true/false-compatible value (true/false, yes/no, 1/0, on/off)." >&2
-    fi
-    read -r -p "Use CDN inbounds? [true/false]: " value
+    echo "Enter a true/false-compatible value (true/false, yes/no, 1/0, on/off)." >&2
   done
 }
 
