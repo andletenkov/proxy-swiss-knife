@@ -1044,12 +1044,15 @@ confirm_configuration() {
     echo
   fi
 
+  # Credentials (usernames/passwords) are deliberately not shown here --
+  # this is a pre-confirm preview of what will be created, not a place to
+  # leak secrets partially (username with no password is pointless anyway).
+  # Full credentials are printed once, at the end, by print_client_links.
   if [[ -n "$NAIVE_SUBDOMAIN" ]]; then
     echo "NaiveProxy (direct connection, no CDN):"
     echo "  domain: ${NAIVE_SUBDOMAIN}.${BASE_DOMAIN} (DNS-only/grey-cloud -- do NOT enable the Cloudflare proxy for this record)"
     echo "  public/client port: 443"
     echo "  internal Caddy port: ${NAIVE_PORT}"
-    echo "  username: ${NAIVE_USERNAME}"
     echo
   fi
 
@@ -1057,7 +1060,6 @@ confirm_configuration() {
     echo "mieru (direct connection, no CDN):"
     echo "  domain: ${MIERU_SUBDOMAIN}.${BASE_DOMAIN} (DNS-only/grey-cloud -- do NOT enable the Cloudflare proxy for this record)"
     echo "  public/client ports: $(format_mieru_ports "$MIERU_PORTS")"
-    echo "  username: ${MIERU_USERNAME}"
     echo
   fi
 

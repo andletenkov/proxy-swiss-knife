@@ -1919,7 +1919,7 @@ EOF
   [[ "$output" == *"NaiveProxy (direct connection, no CDN):"* ]]
   [[ "$output" == *"domain: naive.example.com"* ]]
   [[ "$output" == *"internal Caddy port: 21000"* ]]
-  [[ "$output" == *"username: user_abcd1234"* ]]
+  [[ "$output" != *"username:"* ]]
   [[ "$output" == *"21000/tcp"* ]]
 }
 
