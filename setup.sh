@@ -741,14 +741,10 @@ collect_input() {
   local default_grpc_port=""
   local default_xhttp_port=""
 
-  cat <<'BANNER'
-
-  PROXY SWISS KNIFE
-  ==================
-  >----------------====[]
-     one script. every transport. no hand-wiring.
-
-BANNER
+  echo
+  echo "Proxy Swiss Knife"
+  echo "one script. every transport. no hand-wiring."
+  echo
 
   prompt_install_mode
   prompt BASE_DOMAIN "Base domain, for example example.com" "$BASE_DOMAIN"
