@@ -188,6 +188,15 @@ valid_inputs() {
   [[ "$output" == *"${XHTTP_PORT}/tcp"* ]]
 }
 
+@test "confirm_configuration shows a base subscription URL without a subscription ID (not yet generated pre-install)" {
+  valid_inputs
+
+  run confirm_configuration <<< "y"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"base URL: https://admin.example.com${SUB_PATH}/"* ]]
+  [[ "$output" == *"subscription ID appended"* ]]
+}
+
 @test "confirm_configuration omits the Reality section when disabled" {
   valid_inputs
   REALITY_SUBDOMAIN=""
@@ -1092,11 +1101,14 @@ cf_real_ip_env() {
   PANEL_SUBDOMAIN="admin"
   PANEL_PATH="/admin"
   SUB_PATH="/sub"
+  CLIENT_SUB_ID="abc123def456"
 
   run print_client_links
   [ "$status" -eq 0 ]
   [[ "$output" == *"=== Subscription (all Xray-based connections: WebSocket, gRPC, XHTTP -- generated live by 3x-ui, always accurate) ==="* ]]
-  [[ "$output" == *"URL: https://admin.example.com/sub/"* ]]
+  # Must include the per-client subscription ID -- the bare base path alone
+  # isn't a usable subscription link.
+  [[ "$output" == *"URL: https://admin.example.com/sub/abc123def456"* ]]
   # No hand-built per-protocol vless:// URIs anymore -- the subscription
   # URL above is the only source of truth for these.
   [[ "$output" != *"vless://"* ]]
@@ -1110,12 +1122,13 @@ cf_real_ip_env() {
   PANEL_SUBDOMAIN="admin"
   PANEL_PATH="/admin"
   SUB_PATH="/sub"
+  CLIENT_SUB_ID="abc123def456"
   REALITY_SUBDOMAIN="reality"
 
   run print_client_links
   [ "$status" -eq 0 ]
   [[ "$output" == *"=== Subscription (all Xray-based connections: Reality, Hysteria2 -- generated live by 3x-ui, always accurate) ==="* ]]
-  [[ "$output" == *"URL: https://admin.example.com/sub/"* ]]
+  [[ "$output" == *"URL: https://admin.example.com/sub/abc123def456"* ]]
   [[ "$output" != *"vless://"* ]]
   [[ "$output" != *"security=reality"* ]]
 }
@@ -1301,6 +1314,16 @@ print_summary_env() {
   CF_REAL_IP_CONF="/etc/nginx/conf.d/cloudflare-real-ip.conf"
   CF_CREDENTIALS="/etc/letsencrypt/cloudflare.ini"
   CERTBOT_DEPLOY_HOOK="/etc/letsencrypt/renewal-hooks/deploy/nginx-reload.sh"
+}
+
+@test "print_summary shows the subscription URL with its subscription ID appended" {
+  print_summary_env
+  REALITY_SUBDOMAIN=""
+  CLIENT_SUB_ID="abc123def456"
+
+  run print_summary
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"URL: https://admin.example.com/sub/abc123def456"* ]]
 }
 
 @test "print_summary omits the Reality section when disabled" {

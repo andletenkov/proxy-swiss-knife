@@ -1032,7 +1032,8 @@ confirm_configuration() {
     echo
   fi
   echo "Subscription:"
-  echo "  URL: https://${panel_domain}${SUB_PATH}/"
+  echo "  base URL: https://${panel_domain}${SUB_PATH}/ (your actual per-client link,"
+  echo "    with its subscription ID appended, is shown at the end of setup)"
   echo "  internal port: ${SUB_PORT}"
   echo
   if [[ -n "$REALITY_SUBDOMAIN" ]]; then
@@ -2220,7 +2221,7 @@ print_summary() {
   echo
   fi
   echo "Subscription:"
-  echo "  URL: https://${panel_domain}${SUB_PATH}/"
+  echo "  URL: https://${panel_domain}${SUB_PATH}/${CLIENT_SUB_ID}"
   echo "  internal port: ${SUB_PORT}"
   echo
   if [[ -n "$REALITY_SUBDOMAIN" ]]; then
@@ -3352,7 +3353,7 @@ print_client_links() {
   # hand-built URI duplicated here could. Add the subscription URL to any
   # VLESS/Hysteria2-compatible client and it will list every Xray inbound.
   echo "=== Subscription (all Xray-based connections: $([[ \"$INSTALL_MODE\" == \"cdn\" ]] && echo -n "WebSocket, gRPC, XHTTP" || echo -n "Reality, Hysteria2") -- generated live by 3x-ui, always accurate) ==="
-  echo "  URL: https://${PANEL_SUBDOMAIN}.${BASE_DOMAIN}${SUB_PATH}/"
+  echo "  URL: https://${PANEL_SUBDOMAIN}.${BASE_DOMAIN}${SUB_PATH}/${CLIENT_SUB_ID}"
   echo "  Add this URL directly to your client app (v2rayN, NekoBox, Shadowrocket, etc.)"
   echo "  -- it lists every Xray inbound above with its real, current settings."
 
