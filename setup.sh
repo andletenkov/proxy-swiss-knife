@@ -3535,7 +3535,7 @@ print_client_links() {
       echo "    server: ${NAIVE_SUBDOMAIN}.${BASE_DOMAIN}"
       echo "    port: 443"
       echo "    transport: TCP"
-      echo "    udp: true"
+      echo "    udp: false"
       echo "    username: ${NAIVE_USERNAME}"
       echo "    password: ${NAIVE_PASSWORD}"
       echo "    multiplexing: MULTIPLEXING_HIGH"

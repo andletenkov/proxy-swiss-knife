@@ -1341,7 +1341,7 @@ cf_real_ip_env() {
   run print_client_links
   [ "$status" -eq 0 ]
   [[ "$output" == *"=== Karing proxy config (YAML) ==="* ]]
-  [[ "$output" == *$'  - name: "🇪🇪 NaiveProxy (naive.example.com:443)"\n    type: naive\n    server: naive.example.com\n    port: 443\n    transport: TCP\n    udp: true\n    username: naive-user\n    password: naive-password\n    multiplexing: MULTIPLEXING_HIGH'* ]]
+  [[ "$output" == *$'  - name: "🇪🇪 NaiveProxy (naive.example.com:443)"\n    type: naive\n    server: naive.example.com\n    port: 443\n    transport: TCP\n    udp: false\n    username: naive-user\n    password: naive-password\n    multiplexing: MULTIPLEXING_HIGH'* ]]
   [[ "$output" == *$'  - name: "🇪🇪 Mieru TCP (mieru.example.com:853)"\n    type: mieru\n    server: mieru.example.com\n    port: 853\n    transport: TCP'* ]]
   [[ "$output" == *$'  - name: "🇪🇪 Mieru UDP (mieru.example.com:123)"\n    type: mieru\n    server: mieru.example.com\n    port: 123\n    transport: UDP'* ]]
 }
