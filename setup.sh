@@ -3346,6 +3346,7 @@ print_client_links() {
     echo "  Salamander password: ${HYSTERIA_OBFS_PASSWORD}"
     echo "  SNI: ${HYSTERIA_SUBDOMAIN}.${BASE_DOMAIN}"
     echo "  Note: Salamander disables normal HTTP/3 masquerading."
+    echo "hysteria2://${HYSTERIA_AUTH}@${HYSTERIA_SUBDOMAIN}.${BASE_DOMAIN}:${HYSTERIA_PORT}/?sni=${HYSTERIA_SUBDOMAIN}.${BASE_DOMAIN}&obfs=salamander&obfs-password=${HYSTERIA_OBFS_PASSWORD}#${INBOUND_REMARK_HYSTERIA:-$(detect_country_flag) Hysteria-Gecko}"
   fi
 
   if [[ -n "$REALITY_SUBDOMAIN" ]]; then

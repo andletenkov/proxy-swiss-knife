@@ -1163,6 +1163,24 @@ cf_real_ip_env() {
   [[ "$output" == *"vless://11111111-2222-3333-4444-555555555555@reality.example.com:443?type=tcp&security=reality&pbk=reality-pub-stub&fp=chrome&sni=github.com&sid=abcd1234&flow=xtls-rprx-vision#reality-remark"* ]]
 }
 
+@test "print_client_links emits a hysteria2:// URI when enabled" {
+  BASE_DOMAIN="example.com"
+  XUI_USERNAME="u"
+  XUI_PASSWORD="p"
+  PANEL_SUBDOMAIN="admin"
+  PANEL_PATH="/admin"
+  HYSTERIA_SUBDOMAIN="hy2"
+  HYSTERIA_PORT="443"
+  HYSTERIA_AUTH="authsecret"
+  HYSTERIA_OBFS_PASSWORD="obfssecret"
+  INBOUND_REMARK_HYSTERIA="hysteria-remark"
+
+  run print_client_links
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"=== Hysteria2 (direct UDP/QUIC) ==="* ]]
+  [[ "$output" == *"hysteria2://authsecret@hy2.example.com:443/?sni=hy2.example.com&obfs=salamander&obfs-password=obfssecret#hysteria-remark"* ]]
+}
+
 @test "print_client_links prints NaiveProxy connection info when enabled" {
   CLIENT_UUID="11111111-2222-3333-4444-555555555555"
   WS_PATH="/api/v1/events"
