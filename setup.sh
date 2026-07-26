@@ -390,14 +390,36 @@ random_free_port() {
 # isn't already listening under that protocol. Prints a comma-separated
 # survivors list to stdout; warns (but doesn't fail) on skipped candidates,
 # since losing one boring port still leaves the others usable.
+#
+# $1 is a comma-separated "port:proto" list already configured on a PRIOR
+# run ("" if none yet). Those ports are always kept as-is, without
+# re-running the "already in use" check on them -- otherwise, on a rerun,
+# mieru's own already-listening server would look like a collision with
+# itself and get dropped. Any OTHER candidate not yet in that list (e.g. one
+# added to MIERU_CANDIDATE_PORTS by a later version of this script, or one
+# that has since become free) is freshly evaluated and added if it survives.
+# This makes reruns self-healing instead of forever reusing whatever
+# survived on the very first run.
 select_mieru_ports() {
-  # Accepts any number of other reserved ports to exclude, same convention
-  # as random_free_port.
+  # $1 = existing "port:proto,port:proto" list to keep as-is. Remaining args
+  # (like random_free_port) are other reserved ports to exclude.
+  local existing="$1"
+  shift
   local candidate port proto other collision survivors=()
+  local existing_binding existing_port kept_ports=" "
+
+  for existing_binding in ${existing//,/ }; do
+    [[ -n "$existing_binding" ]] || continue
+    existing_port="${existing_binding%%:*}"
+    kept_ports+="${existing_port} "
+    survivors+=("$existing_binding")
+  done
 
   for candidate in "${MIERU_CANDIDATE_PORTS[@]}"; do
     port="${candidate%%:*}"
     proto="${candidate#*:}"
+
+    [[ "$kept_ports" != *" ${port} "* ]] || continue
 
     collision=false
     for other in "$@"; do
@@ -911,11 +933,12 @@ collect_input() {
   prompt_optional MIERU_SUBDOMAIN "mieru subdomain (DNS-only, e.g. mieru)" "$MIERU_SUBDOMAIN"
 
   if [[ -n "$MIERU_SUBDOMAIN" ]]; then
-    if [[ -z "$MIERU_PORTS" ]]; then
-      MIERU_PORTS="$(select_mieru_ports "443" "$SUB_PORT" "$WS_PORT" "$GRPC_PORT" "$XHTTP_PORT" "$PANEL_PORT" "${REALITY_PORT:-}" "${NAIVE_PORT:-}" "${HYSTERIA_PORT:-}")"
-      [[ -n "$MIERU_PORTS" ]] ||
-        die "Every mieru candidate port (${MIERU_CANDIDATE_PORTS[*]}) collided with another reserved port or was already in use on this host."
-    fi
+    # Always reconcile rather than only computing once: keeps already-working
+    # ports on a rerun (see select_mieru_ports) while still picking up any
+    # newly-available or newly-added candidate.
+    MIERU_PORTS="$(select_mieru_ports "$MIERU_PORTS" "443" "$SUB_PORT" "$WS_PORT" "$GRPC_PORT" "$XHTTP_PORT" "$PANEL_PORT" "${REALITY_PORT:-}" "${NAIVE_PORT:-}" "${HYSTERIA_PORT:-}")"
+    [[ -n "$MIERU_PORTS" ]] ||
+      die "Every mieru candidate port (${MIERU_CANDIDATE_PORTS[*]}) collided with another reserved port or was already in use on this host."
 
     [[ -n "$MIERU_USERNAME" ]] || MIERU_USERNAME="user_$(openssl rand -hex 4)"
     [[ -n "$MIERU_PASSWORD" ]] || MIERU_PASSWORD="$(openssl rand -hex 16)"

@@ -544,6 +544,41 @@ valid_inputs() {
   done
 }
 
+@test "select_mieru_ports picks all free candidates on a first run (no existing ports)" {
+  ports="$(select_mieru_ports "")"
+  [[ "$ports" == *"53:UDP"* ]]
+  [[ "$ports" == *"123:UDP"* ]]
+  [[ "$ports" == *"4500:UDP"* ]]
+  [[ "$ports" == *"853:TCP"* ]]
+  [[ "$ports" == *"993:TCP"* ]]
+  [[ "$ports" == *"8443:TCP"* ]]
+}
+
+@test "select_mieru_ports keeps already-configured ports without re-checking them as 'already listening'" {
+  # mieru itself is presumably already bound to 853, simulating a rerun --
+  # this must NOT be treated as a self-collision and dropped.
+  export SS_LISTENING_PORTS="853"
+  ports="$(select_mieru_ports "853:TCP")"
+  [[ "$ports" == *"853:TCP"* ]]
+}
+
+@test "select_mieru_ports self-heals by adding newly-available candidates on a rerun" {
+  # Simulates a config saved before 123:UDP/4500:UDP existed as candidates --
+  # only 853:TCP was persisted, but a rerun should pick up the still-free
+  # newer candidates instead of forever reusing just the old set.
+  ports="$(select_mieru_ports "853:TCP")"
+  [[ "$ports" == *"853:TCP"* ]]
+  [[ "$ports" == *"123:UDP"* ]]
+  [[ "$ports" == *"4500:UDP"* ]]
+}
+
+@test "select_mieru_ports still excludes newly-colliding candidates not already kept" {
+  export SS_LISTENING_PORTS="123"
+  ports="$(select_mieru_ports "853:TCP")"
+  [[ "$ports" == *"853:TCP"* ]]
+  [[ "$ports" != *"123:UDP"* ]]
+}
+
 @test "random_free_port tolerates empty exclusion args" {
   run random_free_port "" ""
   [ "$status" -eq 0 ]
