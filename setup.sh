@@ -266,6 +266,26 @@ prompt_optional() {
   printf -v "$variable_name" '%s' "$value"
 }
 
+# Clears a persisted optional-feature subdomain (loaded from a previous run's
+# saved config) if it collides with a subdomain already fixed earlier in
+# THIS run, so prompt_optional() never re-offers a default that
+# validate_inputs would reject anyway (e.g. a stale REALITY_SUBDOMAIN that
+# happens to equal the VLESS_SUBDOMAIN you just typed).
+clear_stale_subdomain_default() {
+  local variable_name="$1"
+  shift
+  local current="${!variable_name}"
+  local other=""
+
+  for other in "$@"; do
+    if [[ -n "$current" && -n "$other" && "$current" == "$other" ]]; then
+      echo "NOTE: clearing saved ${variable_name}=\"${current}\" -- it collides with a subdomain already set in this run." >&2
+      printf -v "$variable_name" '%s' ""
+      return
+    fi
+  done
+}
+
 # Converts the public CDN_MODE value to the internal branch selector. Keep the
 # latter separate: CDN_MODE retains the user's true/false-compatible input.
 normalize_cdn_mode() {
@@ -812,6 +832,7 @@ collect_input() {
   if [[ "$INSTALL_MODE" == "no-cdn" ]]; then
     echo
     echo "Optional: Hysteria2 is a direct UDP/QUIC connection (DNS-only/grey-cloud)."
+    clear_stale_subdomain_default HYSTERIA_SUBDOMAIN "$PANEL_SUBDOMAIN"
     prompt_optional HYSTERIA_SUBDOMAIN "Hysteria2 subdomain (e.g. hy2)" "$HYSTERIA_SUBDOMAIN"
     if [[ -n "$HYSTERIA_SUBDOMAIN" ]]; then
       HYSTERIA_PORT="${HYSTERIA_PORT:-443}"
@@ -827,6 +848,7 @@ collect_input() {
     echo "Optional: VLESS+Reality is a direct connection (use a DNS-only/grey-cloud"
     echo "record), sharing port 443 with the panel via SNI-based routing."
     echo
+    clear_stale_subdomain_default REALITY_SUBDOMAIN "$PANEL_SUBDOMAIN" "$VLESS_SUBDOMAIN"
     prompt_optional REALITY_SUBDOMAIN "Reality subdomain (DNS-only, e.g. reality)" "$REALITY_SUBDOMAIN"
 
   if [[ -n "$REALITY_SUBDOMAIN" ]]; then
@@ -852,6 +874,7 @@ collect_input() {
   echo "the CDN and Reality inbounds above via SNI-based routing. Leave the"
   echo "subdomain blank to skip it."
   echo
+  clear_stale_subdomain_default NAIVE_SUBDOMAIN "$PANEL_SUBDOMAIN" "$VLESS_SUBDOMAIN" "$REALITY_SUBDOMAIN"
   prompt_optional NAIVE_SUBDOMAIN "NaiveProxy subdomain (DNS-only, e.g. naive)" "$NAIVE_SUBDOMAIN"
 
   if [[ -n "$NAIVE_SUBDOMAIN" ]]; then
@@ -878,6 +901,7 @@ collect_input() {
   echo "it listens on several fixed, deliberately unremarkable ports: ${MIERU_CANDIDATE_PORTS[*]}."
   echo "Leave the subdomain blank to skip it."
   echo
+  clear_stale_subdomain_default MIERU_SUBDOMAIN "$PANEL_SUBDOMAIN" "$VLESS_SUBDOMAIN" "$REALITY_SUBDOMAIN" "$NAIVE_SUBDOMAIN" "$HYSTERIA_SUBDOMAIN"
   prompt_optional MIERU_SUBDOMAIN "mieru subdomain (DNS-only, e.g. mieru)" "$MIERU_SUBDOMAIN"
 
   if [[ -n "$MIERU_SUBDOMAIN" ]]; then
