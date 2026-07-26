@@ -346,7 +346,7 @@ valid_inputs() {
   python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); assert s["subDomain"] == ""; assert s["subURI"] == "https://admin.example.com/sub/"' "$update_body"
 }
 
-@test "ensure_hysteria_subscription_client repairs only a mismatched subscription auth" {
+@test "ensure_hysteria_client migrates a legacy users auth into the Hysteria client" {
   HYSTERIA_SUBDOMAIN="hy2"
   HYSTERIA_PORT="443"
   CLIENT_UUID="script-client-uuid"
@@ -371,16 +371,16 @@ valid_inputs() {
   }
 
   repair_hysteria_client() {
-    ensure_hysteria_subscription_client
+    ensure_hysteria_client
     printf '%s' "$CLIENT_SUB_ID"
   }
   run repair_hysteria_client
   [ "$status" -eq 0 ]
   [ "$output" = "panel-sub-id" ]
-  python3 -c 'import json,sys; i=json.load(open(sys.argv[1])); s=json.loads(i["settings"]); c=s["clients"][0]; assert c["auth"] == "server-auth"; assert c["id"] == "panel-client-id"; assert c["subId"] == "panel-sub-id"; assert s["users"][0]["auth"] == "server-auth"' "$update_body"
+  python3 -c 'import json,sys; i=json.load(open(sys.argv[1])); s=json.loads(i["settings"]); c=s["clients"][0]; assert c["auth"] == "server-auth"; assert c["id"] == "panel-client-id"; assert c["subId"] == "panel-sub-id"; assert "users" not in s' "$update_body"
 }
 
-@test "ensure_hysteria_inbound creates matching server and subscription auth values" {
+@test "ensure_hysteria_inbound creates a single Hysteria client auth value" {
   HYSTERIA_SUBDOMAIN="hy2"
   HYSTERIA_PORT="443"
   HYSTERIA_AUTH="shared-auth"
@@ -405,7 +405,7 @@ valid_inputs() {
 
   run ensure_hysteria_inbound
   [ "$status" -eq 0 ]
-  python3 -c 'import json,sys; s=json.load(open(sys.argv[1]))["settings"]; assert s["users"][0]["auth"] == "shared-auth"; c=s["clients"][0]; assert c["auth"] == "shared-auth"; assert c["id"] == "client-uuid"; assert c["subId"] == "client-sub-id"' "$request_body"
+  python3 -c 'import json,sys; s=json.load(open(sys.argv[1]))["settings"]; c=s["clients"][0]; assert c["auth"] == "shared-auth"; assert c["subId"] == "client-sub-id"; assert "users" not in s' "$request_body"
 }
 
 @test "validate_inputs rejects equal subscription and websocket ports" {

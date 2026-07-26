@@ -2747,7 +2747,7 @@ ensure_hysteria_inbound() {
   export HYSTERIA_PORT_ARG="$HYSTERIA_PORT" HYSTERIA_AUTH_ARG="$HYSTERIA_AUTH" \
     HYSTERIA_OBFS_ARG="$HYSTERIA_OBFS_PASSWORD" HYSTERIA_DOMAIN_ARG="${HYSTERIA_SUBDOMAIN}.${BASE_DOMAIN}" \
     HYSTERIA_CERT_ARG="${CERT_DIR}/fullchain.pem" HYSTERIA_KEY_ARG="${CERT_DIR}/privkey.pem" \
-    HYSTERIA_TAG_ARG="$tag" HYSTERIA_REMARK_ARG="$remark" HYSTERIA_CLIENT_UUID_ARG="$CLIENT_UUID" \
+    HYSTERIA_TAG_ARG="$tag" HYSTERIA_REMARK_ARG="$remark" \
     HYSTERIA_SUB_ID_ARG="$CLIENT_SUB_ID"
   body="$(python3 -c "
 import json,os
@@ -2758,10 +2758,9 @@ print(json.dumps({
   'settings': {
     'version': 2,
     'clients': [{
-      'id': os.environ['HYSTERIA_CLIENT_UUID_ARG'], 'auth': os.environ['HYSTERIA_AUTH_ARG'],
-      'email': 'client', 'enable': True, 'subId': os.environ['HYSTERIA_SUB_ID_ARG'],
+      'auth': os.environ['HYSTERIA_AUTH_ARG'], 'email': 'client',
+      'enable': True, 'subId': os.environ['HYSTERIA_SUB_ID_ARG'],
     }],
-    'users': [{'auth': os.environ['HYSTERIA_AUTH_ARG'], 'level': 0, 'email': 'client'}],
   },
   'streamSettings': {
     'network': 'hysteria', 'security': 'tls',
@@ -2922,7 +2921,7 @@ sys.exit(1)
 # inbound's actual config (see github.com/MHSanaei/3x-ui/issues/5143 for the
 # analogous externalProxy-driven variant of this failure mode). Idempotent:
 # skips creation if a host already exists for this inbound.
-ensure_hysteria_subscription_client() {
+ensure_hysteria_client() {
   [[ -n "$HYSTERIA_SUBDOMAIN" ]] || return 0
 
   local tag="in-${HYSTERIA_PORT}-hysteria" list_resp id detail_resp prepared body changed resp
@@ -2942,7 +2941,7 @@ sys.exit(1)
     die "Could not find Hysteria2 inbound '${tag}' to verify its subscription client."
 
   detail_resp="$(api_curl -X GET "${BASE_URL}/panel/api/inbounds/get/${id}")"
-  export HYSTERIA_CLIENT_UUID_ARG="$CLIENT_UUID" HYSTERIA_SUB_ID_ARG="$CLIENT_SUB_ID"
+  export HYSTERIA_SUB_ID_ARG="$CLIENT_SUB_ID" HYSTERIA_AUTH_ARG="$HYSTERIA_AUTH"
   prepared="$(python3 -c "
 import json,os,sys
 try:
@@ -2950,19 +2949,19 @@ try:
     if not isinstance(inbound, dict): raise ValueError('missing inbound detail')
     raw = inbound.get('settings') or {}
     settings = json.loads(raw) if isinstance(raw, str) else raw
-    user = next((u for u in settings.get('users', []) if u.get('email') == 'client'), None)
-    if not user or not user.get('auth'): raise ValueError('missing Hysteria server user auth')
-    server_auth = user['auth']
     clients = settings.setdefault('clients', [])
     client = next((c for c in clients if c.get('email') == 'client'), None)
     changed = False
     if client is None:
-        client = {'id': os.environ['HYSTERIA_CLIENT_UUID_ARG'], 'email': 'client',
+        client = {'auth': os.environ['HYSTERIA_AUTH_ARG'], 'email': 'client',
                   'enable': True, 'subId': os.environ['HYSTERIA_SUB_ID_ARG']}
         clients.append(client)
         changed = True
-    if client.get('auth') != server_auth:
-        client['auth'] = server_auth
+    legacy_user = next((u for u in settings.get('users', []) if u.get('email') == 'client'), None)
+    if legacy_user and legacy_user.get('auth') and client.get('auth') != legacy_user['auth']:
+        client['auth'] = legacy_user['auth']
+        changed = True
+    if settings.pop('users', None) is not None:
         changed = True
     if not client.get('subId'):
         client['subId'] = os.environ['HYSTERIA_SUB_ID_ARG']
@@ -2973,7 +2972,7 @@ try:
     print(json.dumps({'changed': changed, 'body': inbound if changed else None,
                       'subId': client['subId']}))
 except Exception as e:
-    print(f'Failed to prepare Hysteria2 subscription client: {e}', file=sys.stderr)
+    print(f'Failed to prepare Hysteria2 client: {e}', file=sys.stderr)
     sys.exit(1)
 " "$detail_resp")" || die "Could not inspect Hysteria2 inbound '${tag}'."
 
@@ -3391,7 +3390,7 @@ run_xui_install_and_inbounds() {
     ensure_grpc_inbound
   else
     ensure_hysteria_inbound
-    ensure_hysteria_subscription_client
+    ensure_hysteria_client
     ensure_hysteria_host
     ensure_reality_keys
     ensure_reality_inbound
