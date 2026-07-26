@@ -1292,6 +1292,8 @@ verify_deployment_env() {
   PANEL_PATH="/admin"
   PANEL_PORT="2053"
   SUB_PORT="2096"
+  SUB_PATH="/sub"
+  CLIENT_SUB_ID="client-sub-id"
   WS_PORT="10001"
   GRPC_PORT="10002"
   XHTTP_PORT="10003"
@@ -1313,6 +1315,25 @@ verify_deployment_env() {
   [[ "$output" == *"[OK]   Reality is listening on 127.0.0.1:20000"* ]]
   [[ "$output" == *"[OK]   NaiveProxy is listening on 127.0.0.1:21000"* ]]
   [[ "$output" == *"All checks passed."* ]]
+}
+
+@test "verify_deployment fails when the subscription link is not usable" {
+  verify_deployment_env
+  export SS_LISTENING_PORTS="2053 2096 10001 10002 10003"
+
+  curl() {
+    local url="${!#}"
+    if [[ "$url" == *"/sub/client-sub-id" ]]; then
+      printf '403'
+    else
+      printf '200'
+    fi
+  }
+
+  run verify_deployment
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[FAIL] Subscription link responded with HTTP 403 (expected 200): https://admin.example.com/sub/client-sub-id"* ]]
+  [[ "$output" != *"All checks passed."* ]]
 }
 
 @test "verify_deployment reports a failing Reality listener" {

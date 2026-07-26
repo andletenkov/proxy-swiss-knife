@@ -3521,6 +3521,16 @@ verify_deployment() {
       all_ok=false
     fi
 
+    local subscription_url="https://${panel_domain}${SUB_PATH}/${CLIENT_SUB_ID}"
+    local subscription_status
+    subscription_status="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 "$subscription_url" || echo "000")"
+    if [[ "$subscription_status" == "200" ]]; then
+      echo "  [OK]   Subscription link responded with HTTP 200"
+    else
+      echo "  [FAIL] Subscription link responded with HTTP ${subscription_status} (expected 200): ${subscription_url}"
+      all_ok=false
+    fi
+
     if [[ "$INSTALL_MODE" == "cdn" ]]; then
       local vless_status
       vless_status="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 "https://${vless_domain}/" || echo "000")"
