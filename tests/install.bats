@@ -346,6 +346,68 @@ valid_inputs() {
   python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); assert s["subDomain"] == ""; assert s["subURI"] == "https://admin.example.com/sub/"' "$update_body"
 }
 
+@test "ensure_hysteria_subscription_client repairs only a mismatched subscription auth" {
+  HYSTERIA_SUBDOMAIN="hy2"
+  HYSTERIA_PORT="443"
+  CLIENT_UUID="script-client-uuid"
+  CLIENT_SUB_ID="script-sub-id"
+  BASE_URL="http://127.0.0.1:2053"
+  local update_body="${BATS_TEST_TMPDIR}/hysteria-update.json"
+
+  api_curl() {
+    case " $* " in
+      *" /panel/api/inbounds/list "*) printf '%s' '{"success":true,"obj":[{"id":7,"tag":"in-443-hysteria","port":443}]}' ;;
+      *" /panel/api/inbounds/get/7 "*) printf '%s' '{"success":true,"obj":{"id":7,"settings":"{\"users\":[{\"email\":\"client\",\"auth\":\"server-auth\"}],\"clients\":[{\"id\":\"panel-client-id\",\"email\":\"client\",\"auth\":\"wrong-auth\",\"subId\":\"panel-sub-id\",\"enable\":true}]}","streamSettings":{}}}' ;;
+      *" /panel/api/inbounds/update/7 "*)
+        local arg body_next=""
+        for arg in "$@"; do
+          if [[ "$body_next" == yes ]]; then printf '%s' "$arg" > "$update_body"; break; fi
+          [[ "$arg" == "-d" ]] && body_next=yes
+        done
+        printf '%s' '{"success":true}'
+        ;;
+      *) printf '%s' '{"success":true}' ;;
+    esac
+  }
+
+  repair_hysteria_client() {
+    ensure_hysteria_subscription_client
+    printf '%s' "$CLIENT_SUB_ID"
+  }
+  run repair_hysteria_client
+  [ "$status" -eq 0 ]
+  [ "$output" = "panel-sub-id" ]
+  python3 -c 'import json,sys; i=json.load(open(sys.argv[1])); s=json.loads(i["settings"]); c=s["clients"][0]; assert c["auth"] == "server-auth"; assert c["id"] == "panel-client-id"; assert c["subId"] == "panel-sub-id"; assert s["users"][0]["auth"] == "server-auth"' "$update_body"
+}
+
+@test "ensure_hysteria_inbound creates matching server and subscription auth values" {
+  HYSTERIA_SUBDOMAIN="hy2"
+  HYSTERIA_PORT="443"
+  HYSTERIA_AUTH="shared-auth"
+  HYSTERIA_OBFS_PASSWORD="obfs"
+  BASE_DOMAIN="example.com"
+  CERT_DIR="/certs"
+  CLIENT_UUID="client-uuid"
+  CLIENT_SUB_ID="client-sub-id"
+  BASE_URL="http://127.0.0.1:2053"
+  local request_body="${BATS_TEST_TMPDIR}/hysteria-add.json"
+
+  xui_inbound_exists() { return 1; }
+  detect_country_flag() { printf 'US'; }
+  api_curl() {
+    local arg body_next=""
+    for arg in "$@"; do
+      if [[ "$body_next" == yes ]]; then printf '%s' "$arg" > "$request_body"; break; fi
+      [[ "$arg" == "-d" ]] && body_next=yes
+    done
+    printf '%s' '{"success":true}'
+  }
+
+  run ensure_hysteria_inbound
+  [ "$status" -eq 0 ]
+  python3 -c 'import json,sys; s=json.load(open(sys.argv[1]))["settings"]; assert s["users"][0]["auth"] == "shared-auth"; c=s["clients"][0]; assert c["auth"] == "shared-auth"; assert c["id"] == "client-uuid"; assert c["subId"] == "client-sub-id"' "$request_body"
+}
+
 @test "validate_inputs rejects equal subscription and websocket ports" {
   valid_inputs
   SUB_PORT="$WS_PORT"

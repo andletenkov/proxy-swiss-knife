@@ -2747,14 +2747,22 @@ ensure_hysteria_inbound() {
   export HYSTERIA_PORT_ARG="$HYSTERIA_PORT" HYSTERIA_AUTH_ARG="$HYSTERIA_AUTH" \
     HYSTERIA_OBFS_ARG="$HYSTERIA_OBFS_PASSWORD" HYSTERIA_DOMAIN_ARG="${HYSTERIA_SUBDOMAIN}.${BASE_DOMAIN}" \
     HYSTERIA_CERT_ARG="${CERT_DIR}/fullchain.pem" HYSTERIA_KEY_ARG="${CERT_DIR}/privkey.pem" \
-    HYSTERIA_TAG_ARG="$tag" HYSTERIA_REMARK_ARG="$remark"
+    HYSTERIA_TAG_ARG="$tag" HYSTERIA_REMARK_ARG="$remark" HYSTERIA_CLIENT_UUID_ARG="$CLIENT_UUID" \
+    HYSTERIA_SUB_ID_ARG="$CLIENT_SUB_ID"
   body="$(python3 -c "
 import json,os
 print(json.dumps({
   'up': 0, 'down': 0, 'total': 0, 'remark': os.environ['HYSTERIA_REMARK_ARG'], 'enable': True,
   'expiryTime': 0, 'listen': '0.0.0.0', 'port': int(os.environ['HYSTERIA_PORT_ARG']),
   'protocol': 'hysteria', 'tag': os.environ['HYSTERIA_TAG_ARG'],
-  'settings': {'version': 2, 'users': [{'auth': os.environ['HYSTERIA_AUTH_ARG'], 'level': 0, 'email': 'client'}]},
+  'settings': {
+    'version': 2,
+    'clients': [{
+      'id': os.environ['HYSTERIA_CLIENT_UUID_ARG'], 'auth': os.environ['HYSTERIA_AUTH_ARG'],
+      'email': 'client', 'enable': True, 'subId': os.environ['HYSTERIA_SUB_ID_ARG'],
+    }],
+    'users': [{'auth': os.environ['HYSTERIA_AUTH_ARG'], 'level': 0, 'email': 'client'}],
+  },
   'streamSettings': {
     'network': 'hysteria', 'security': 'tls',
     'hysteriaSettings': {'version': 2, 'udpIdleTimeout': 60},
@@ -2914,6 +2922,78 @@ sys.exit(1)
 # inbound's actual config (see github.com/MHSanaei/3x-ui/issues/5143 for the
 # analogous externalProxy-driven variant of this failure mode). Idempotent:
 # skips creation if a host already exists for this inbound.
+ensure_hysteria_subscription_client() {
+  [[ -n "$HYSTERIA_SUBDOMAIN" ]] || return 0
+
+  local tag="in-${HYSTERIA_PORT}-hysteria" list_resp id detail_resp prepared body changed resp
+  list_resp="$(api_curl -X GET "${BASE_URL}/panel/api/inbounds/list")"
+  id="$(python3 -c "
+import json,sys
+try:
+    inbounds = json.loads(sys.argv[1]).get('obj') or []
+except Exception:
+    sys.exit(1)
+for inbound in inbounds:
+    if inbound.get('tag') == sys.argv[2] or inbound.get('port') == int(sys.argv[3]):
+        print(inbound['id'])
+        sys.exit(0)
+sys.exit(1)
+" "$list_resp" "$tag" "$HYSTERIA_PORT")" ||
+    die "Could not find Hysteria2 inbound '${tag}' to verify its subscription client."
+
+  detail_resp="$(api_curl -X GET "${BASE_URL}/panel/api/inbounds/get/${id}")"
+  export HYSTERIA_CLIENT_UUID_ARG="$CLIENT_UUID" HYSTERIA_SUB_ID_ARG="$CLIENT_SUB_ID"
+  prepared="$(python3 -c "
+import json,os,sys
+try:
+    inbound = json.loads(sys.argv[1]).get('obj')
+    if not isinstance(inbound, dict): raise ValueError('missing inbound detail')
+    raw = inbound.get('settings') or {}
+    settings = json.loads(raw) if isinstance(raw, str) else raw
+    user = next((u for u in settings.get('users', []) if u.get('email') == 'client'), None)
+    if not user or not user.get('auth'): raise ValueError('missing Hysteria server user auth')
+    server_auth = user['auth']
+    clients = settings.setdefault('clients', [])
+    client = next((c for c in clients if c.get('email') == 'client'), None)
+    changed = False
+    if client is None:
+        client = {'id': os.environ['HYSTERIA_CLIENT_UUID_ARG'], 'email': 'client',
+                  'enable': True, 'subId': os.environ['HYSTERIA_SUB_ID_ARG']}
+        clients.append(client)
+        changed = True
+    if client.get('auth') != server_auth:
+        client['auth'] = server_auth
+        changed = True
+    if not client.get('subId'):
+        client['subId'] = os.environ['HYSTERIA_SUB_ID_ARG']
+        changed = True
+    if not client.get('subId'): raise ValueError('missing Hysteria subscription ID')
+    if changed:
+        inbound['settings'] = json.dumps(settings) if isinstance(raw, str) else settings
+    print(json.dumps({'changed': changed, 'body': inbound if changed else None,
+                      'subId': client['subId']}))
+except Exception as e:
+    print(f'Failed to prepare Hysteria2 subscription client: {e}', file=sys.stderr)
+    sys.exit(1)
+" "$detail_resp")" || die "Could not inspect Hysteria2 inbound '${tag}'."
+
+  CLIENT_SUB_ID="$(python3 -c "import json,sys; print(json.loads(sys.argv[1])['subId'])" "$prepared")" ||
+    die "Could not read Hysteria2 subscription ID."
+  changed="$(python3 -c "import json,sys; print('true' if json.loads(sys.argv[1])['changed'] else 'false')" "$prepared")"
+  [[ "$changed" == true ]] || return 0
+  body="$(python3 -c "import json,sys; print(json.dumps(json.loads(sys.argv[1])['body']))" "$prepared")"
+
+  resp="$(api_curl -X POST "${BASE_URL}/panel/api/inbounds/update/${id}" \
+    -H 'Content-Type: application/json' -d "$body")"
+  python3 -c "
+import json,sys
+try:
+    sys.exit(0 if json.loads(sys.argv[1]).get('success') else 1)
+except Exception:
+    sys.exit(1)
+" "$resp" || die "Failed to repair Hysteria2 subscription client. Response: ${resp}"
+}
+
 ensure_hysteria_host() {
   [[ -n "$HYSTERIA_SUBDOMAIN" ]] || return 0
 
@@ -3311,6 +3391,7 @@ run_xui_install_and_inbounds() {
     ensure_grpc_inbound
   else
     ensure_hysteria_inbound
+    ensure_hysteria_subscription_client
     ensure_hysteria_host
     ensure_reality_keys
     ensure_reality_inbound
