@@ -3357,6 +3357,19 @@ print_client_links() {
   echo "  Add this URL directly to your client app (v2rayN, NekoBox, Shadowrocket, etc.)"
   echo "  -- it lists every Xray inbound above with its real, current settings."
 
+  if [[ -n "$REALITY_SUBDOMAIN" ]]; then
+    echo
+    echo "=== VLESS Reality (direct connection, no CDN) -- raw connection details ==="
+    echo "  Server: ${REALITY_SUBDOMAIN}.${BASE_DOMAIN}:443"
+    echo "  UUID: ${CLIENT_UUID}"
+    echo "  Public key: ${REALITY_PUBLIC_KEY}"
+    echo "  Short ID: ${REALITY_SHORT_ID}"
+    echo "  SNI (impersonating): ${REALITY_DEST}"
+    echo "  Flow: xtls-rprx-vision"
+    echo "  Fingerprint: chrome"
+    echo "  (use the subscription above for a ready-to-import vless:// link)"
+  fi
+
   if [[ -n "$HYSTERIA_SUBDOMAIN" ]]; then
     echo
     echo "=== Hysteria2 (direct UDP/QUIC) -- raw connection details ==="

@@ -1133,6 +1133,47 @@ cf_real_ip_env() {
   [[ "$output" != *"security=reality"* ]]
 }
 
+@test "print_client_links shows raw Reality connection details but no hand-built vless:// URI" {
+  INSTALL_MODE="no-cdn"
+  BASE_DOMAIN="example.com"
+  XUI_USERNAME="u"
+  XUI_PASSWORD="p"
+  PANEL_SUBDOMAIN="admin"
+  PANEL_PATH="/admin"
+  SUB_PATH="/sub"
+  CLIENT_SUB_ID="abc123def456"
+  CLIENT_UUID="11111111-2222-3333-4444-555555555555"
+  REALITY_SUBDOMAIN="reality"
+  REALITY_DEST="github.com"
+  REALITY_PUBLIC_KEY="reality-pub-stub"
+  REALITY_SHORT_ID="abcd1234"
+
+  run print_client_links
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"=== VLESS Reality (direct connection, no CDN) -- raw connection details ==="* ]]
+  [[ "$output" == *"Server: reality.example.com:443"* ]]
+  [[ "$output" == *"UUID: 11111111-2222-3333-4444-555555555555"* ]]
+  [[ "$output" == *"Public key: reality-pub-stub"* ]]
+  [[ "$output" == *"Short ID: abcd1234"* ]]
+  [[ "$output" == *"SNI (impersonating): github.com"* ]]
+  [[ "$output" != *"vless://"* ]]
+}
+
+@test "print_client_links omits the Reality section when disabled" {
+  INSTALL_MODE="no-cdn"
+  BASE_DOMAIN="example.com"
+  XUI_USERNAME="u"
+  XUI_PASSWORD="p"
+  PANEL_SUBDOMAIN="admin"
+  PANEL_PATH="/admin"
+  SUB_PATH="/sub"
+  REALITY_SUBDOMAIN=""
+
+  run print_client_links
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"VLESS Reality"* ]]
+}
+
 @test "print_client_links shows raw Hysteria2 connection details but no hand-built hysteria2:// URI" {
   INSTALL_MODE="no-cdn"
   BASE_DOMAIN="example.com"
