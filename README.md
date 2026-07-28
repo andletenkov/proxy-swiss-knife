@@ -349,6 +349,21 @@ sudo XUI_VERSION=v3.4.0 ./setup.sh
 Without `XUI_VERSION`, a fresh 3x-ui installation uses the latest stable
 upstream release. It is ignored when 3x-ui already exists.
 
+## Show current configuration
+
+```bash
+sudo ./setup.sh --show
+```
+
+Prints the currently configured connection details -- 3x-ui panel URL and
+credentials, the subscription URL, and raw connection details for any
+direct-connection features that are enabled (Reality, Hysteria2, NaiveProxy,
+mieru) -- in the same human-readable format shown at the end of a normal
+`setup.sh` run. Reads only the saved config (`/etc/nginx/.3xui-proxy.conf`)
+and 3x-ui's own install-result file; it makes no changes to the system.
+Requires root (the saved files are only readable by root) and a prior
+successful `setup.sh` run.
+
 ## Uninstall
 
 ```bash

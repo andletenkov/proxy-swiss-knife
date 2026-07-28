@@ -1370,6 +1370,111 @@ cf_real_ip_env() {
 }
 
 # ---------------------------------------------------------------------------
+# show_configuration
+# ---------------------------------------------------------------------------
+
+setup_show_configuration_fixtures() {
+  # Shared fixture wiring for show_configuration tests: overrides require_root
+  # (tests don't run as root) and points CONFIG_FILE/INSTALL_RESULT_FILE at
+  # BATS_TEST_TMPDIR so no real system files are touched.
+  require_root() { :; }
+
+  CONFIG_FILE="${BATS_TEST_TMPDIR}/xui-proxy.conf"
+  INSTALL_RESULT_FILE="${BATS_TEST_TMPDIR}/install-result.env"
+
+  cat > "$CONFIG_FILE" <<'EOF'
+CDN_MODE="true"
+BASE_DOMAIN="example.com"
+PANEL_SUBDOMAIN="admin"
+VLESS_SUBDOMAIN="vpn"
+PANEL_PATH="/rand0mBaseP4th"
+PANEL_PORT="2053"
+SUB_PORT="2096"
+WS_PORT="10001"
+GRPC_PORT="10002"
+XHTTP_PORT="10003"
+WS_PATH="/api/v1/events"
+GRPC_SERVICE="api.v1.SyncService"
+XHTTP_PATH="/api/v1/ingest/abcd1234"
+SUB_PATH="/sub"
+CLIENT_UUID="11111111-2222-3333-4444-555555555555"
+CLIENT_SUB_ID="abc123def456"
+REALITY_SUBDOMAIN=""
+NAIVE_SUBDOMAIN=""
+MIERU_SUBDOMAIN=""
+EOF
+
+  cat > "$INSTALL_RESULT_FILE" <<'EOF'
+XUI_USERNAME="admin_ab12cd34"
+XUI_PASSWORD="S3cretPass1234567890AB"
+EOF
+}
+
+@test "show_configuration prints panel credentials, URL and subscription link from saved state" {
+  setup_show_configuration_fixtures
+
+  run show_configuration
+  [ "$status" -eq 0 ]
+
+  [[ "$output" == *"=== Current proxy-swiss-knife configuration ==="* ]]
+  [[ "$output" == *"Username: admin_ab12cd34"* ]]
+  [[ "$output" == *"Password: S3cretPass1234567890AB"* ]]
+  [[ "$output" == *"https://admin.example.com/rand0mBaseP4th/"* ]]
+  [[ "$output" == *"URL: https://admin.example.com/sub/abc123def456"* ]]
+}
+
+@test "show_configuration fails with a clear message when no saved config exists" {
+  require_root() { :; }
+  CONFIG_FILE="${BATS_TEST_TMPDIR}/does-not-exist.conf"
+
+  run show_configuration
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"No saved configuration found"* ]]
+}
+
+@test "show_configuration warns but still runs when the 3x-ui install-result file is missing" {
+  setup_show_configuration_fixtures
+  rm -f "$INSTALL_RESULT_FILE"
+
+  run show_configuration
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"install-result.env not found"* ]]
+  [[ "$output" == *"URL: https://admin.example.com/sub/abc123def456"* ]]
+}
+
+@test "show_configuration shows the Reality section when enabled in saved config" {
+  setup_show_configuration_fixtures
+  cat >> "$CONFIG_FILE" <<'EOF'
+REALITY_SUBDOMAIN="reality"
+REALITY_DEST="www.microsoft.com:443"
+REALITY_SHORT_ID="abcd1234"
+REALITY_PUBLIC_KEY="reality-pub-key-stub"
+EOF
+
+  run show_configuration
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"VLESS Reality (direct connection, no CDN)"* ]]
+  [[ "$output" == *"Server: reality.example.com:443"* ]]
+}
+
+@test "show_configuration derives no-cdn INSTALL_MODE from a saved CDN_MODE=false config" {
+  setup_show_configuration_fixtures
+  sed -i.bak 's/CDN_MODE="true"/CDN_MODE="false"/' "$CONFIG_FILE"
+
+  run show_configuration
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"=== Subscription (all Xray-based connections: Reality, Hysteria2 -- generated live by 3x-ui, always accurate) ==="* ]]
+}
+
+@test "main --show delegates to show_configuration" {
+  setup_show_configuration_fixtures
+
+  run main --show
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"=== Current proxy-swiss-knife configuration ==="* ]]
+}
+
+# ---------------------------------------------------------------------------
 # verify_deployment
 # ---------------------------------------------------------------------------
 

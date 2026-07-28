@@ -3559,6 +3559,32 @@ print_client_links() {
   fi
 }
 
+# Re-displays the currently configured user's credentials/links from saved
+# state, without touching the system (no install/reconfigure steps run).
+# Reads CONFIG_FILE (setup.sh's own persisted config) for domains/paths/keys,
+# and INSTALL_RESULT_FILE (3x-ui's own persisted panel credentials) for the
+# panel username/password -- the same two sources main() itself relies on.
+show_configuration() {
+  require_root
+
+  [[ -f "$CONFIG_FILE" ]] ||
+    die "No saved configuration found at ${CONFIG_FILE}. Run setup.sh first to install and configure the proxy."
+
+  load_config
+
+  INSTALL_MODE="$(normalize_cdn_mode "$CDN_MODE")" || INSTALL_MODE="no-cdn"
+
+  if [[ -f "$INSTALL_RESULT_FILE" ]]; then
+    # shellcheck disable=SC1090
+    source "$INSTALL_RESULT_FILE"
+  else
+    echo "NOTE: ${INSTALL_RESULT_FILE} not found -- 3x-ui panel username/password will be blank below." >&2
+  fi
+
+  echo "=== Current proxy-swiss-knife configuration ==="
+  print_client_links
+}
+
 verify_deployment() {
   local panel_domain="${PANEL_SUBDOMAIN}.${BASE_DOMAIN}"
   local vless_domain="${VLESS_SUBDOMAIN}.${BASE_DOMAIN}"
@@ -3854,6 +3880,11 @@ uninstall_all() {
 }
 
 main() {
+  if [[ "${1:-}" == "--show" ]]; then
+    show_configuration
+    return
+  fi
+
   if [[ "${1:-}" == "--uninstall" ]]; then
     if [[ "${2:-}" == "--delete-cert" ]]; then
       DELETE_CERT=true
