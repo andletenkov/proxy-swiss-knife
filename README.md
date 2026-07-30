@@ -83,7 +83,7 @@ reached directly.
 | VLESS/WS | Loopback Xray listener proxied through Nginx HTTPS, VLESS Encryption (ML-KEM-768) |
 | VLESS/gRPC | Loopback Xray listener proxied through Nginx HTTP/2, VLESS Encryption (ML-KEM-768) |
 | VLESS/XHTTP | Loopback Xray listener using `packet-up`, proxied with Nginx `grpc_pass`, VLESS Encryption + XTLS-Vision |
-| VLESS/Reality *(`no-cdn`)* | Direct connection, donor-site impersonation, no VLESS Encryption needed |
+| VLESS/Reality *(`no-cdn`)* | Direct connection, XHTTP transport, donor-site impersonation, no VLESS Encryption needed |
 | NaiveProxy *(`no-cdn`)* | Direct connection, Caddy + forwardproxy, reuses the wildcard cert |
 | Hysteria2 *(`no-cdn`)* | Direct UDP/QUIC, Salamander obfuscation, reuses the wildcard cert for its own TLS |
 | mieru *(`no-cdn`)* | Direct connection, mita server, own username/password auth, no TLS/SNI/cert, fixed "boring" port set |
@@ -136,10 +136,10 @@ run. 3x-ui creates panel credentials and its secret panel path itself.
 | `CDN_MODE` | Created inbounds | DNS/proxy requirement |
 |---|---|---|
 | true-compatible | VLESS WebSocket, gRPC, XHTTP/TLS | VLESS hostname is orange-cloud proxied; no Reality, NaiveProxy, Hysteria2, or mieru is allowed |
-| false-compatible | Hysteria2, VLESS TCP+Reality, NaiveProxy, and/or mieru | Direct hostnames are DNS-only; at least one direct inbound is required |
+| false-compatible | Hysteria2, VLESS XHTTP+Reality, NaiveProxy, and/or mieru | Direct hostnames are DNS-only; at least one direct inbound is required |
 
-`xhttp-reality` is reserved for a future `no-cdn` release. Hysteria2 is a
-native direct UDP/QUIC inbound and is created when its subdomain is supplied. A `cdn` run clears any saved Reality/Naive settings, so
+Hysteria2 is a native direct UDP/QUIC inbound and is created when its
+subdomain is supplied. A `cdn` run clears any saved Reality/Naive settings, so
 switching modes is deliberate and cannot leave mixed inbounds behind.
 
 Examples:
@@ -229,6 +229,19 @@ The inbound shares port 443 with everything else via the Nginx stream SNI
 Guard, dispatching by the TLS ClientHello's SNI before any TLS termination
 happens -- Reality's own TLS session is untouched end-to-end.
 
+The inbound uses **XHTTP** transport rather than raw TCP+Vision: XHTTP shapes
+traffic as HTTP/2-style request/response exchanges instead of one long-lived
+raw TCP stream, which is a smaller behavioral outlier for DPI to key on.
+Accordingly, client flow is not `xtls-rprx-vision` (that's RAW-only) --
+clients connect with `type=xhttp` and the generated `path` shown by
+`sudo ./setup.sh --show`. XTLS Vision performance gains don't apply, but the
+tradeoff favors detection resistance.
+
+Existing inbounds are never reconfigured on rerun (see "Re-running for
+updates" above) -- to change `REALITY_DEST` or the XHTTP path on an already
+deployed Reality inbound, delete it in the 3x-ui panel first, then rerun
+`setup.sh` so it's recreated with the new values.
+
 ### `no-cdn`: mieru (direct connection)
 
 Available only when `INSTALL_MODE=no-cdn`; it may be used alone or alongside
@@ -312,6 +325,7 @@ credentials sees an ordinary decoy webpage (the same content as
 | `REALITY_SUBDOMAIN` | blank (disabled) | Optional; must be **DNS-only**, not orange-cloud |
 | `REALITY_DEST` | prompted if Reality enabled | Real, unrelated donor site to impersonate (e.g. `github.com`); never a domain of `BASE_DOMAIN` |
 | `REALITY_PORT`, `REALITY_SHORT_ID`, `REALITY_PRIVATE_KEY`, `REALITY_PUBLIC_KEY` | generated once | Saved and reused on subsequent runs |
+| `REALITY_XHTTP_PATH` | auto-generated | XHTTP request path for the Reality inbound; saved and reused on subsequent runs |
 | `NAIVE_SUBDOMAIN` | blank (disabled) | Optional; must be **DNS-only**, not orange-cloud |
 | `HYSTERIA_SUBDOMAIN` | blank (disabled) | Optional Hysteria2 hostname; must be **DNS-only** |
 | `MIERU_SUBDOMAIN` | blank (disabled) | Optional mieru hostname; must be **DNS-only**; used only as a client-facing label, not for routing |

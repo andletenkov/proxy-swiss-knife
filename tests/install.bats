@@ -211,6 +211,7 @@ valid_inputs() {
   REALITY_SUBDOMAIN="reality"
   REALITY_DEST="github.com"
   REALITY_PORT="20000"
+  REALITY_XHTTP_PATH="/api/v1/probe/abcd1234"
 
   run confirm_configuration <<< "y"
   [ "$status" -eq 0 ]
@@ -218,6 +219,8 @@ valid_inputs() {
   [[ "$output" == *"domain: reality.example.com"* ]]
   [[ "$output" == *"internal Xray port: 20000"* ]]
   [[ "$output" == *"impersonating: github.com"* ]]
+  [[ "$output" == *"network: xhttp"* ]]
+  [[ "$output" == *"path: /api/v1/probe/abcd1234"* ]]
   [[ "$output" == *"20000/tcp"* ]]
 }
 
@@ -759,6 +762,7 @@ valid_inputs() {
     REALITY_DEST="github.com"
     REALITY_PORT="20000"
     REALITY_SHORT_ID="abcd1234abcd5678"
+    REALITY_XHTTP_PATH="/api/v1/probe/abcd1234"
 
     save_config
 
@@ -766,14 +770,15 @@ valid_inputs() {
     REALITY_DEST=""
     REALITY_PORT=""
     REALITY_SHORT_ID=""
+    REALITY_XHTTP_PATH=""
 
     load_config
 
-    printf "SUBDOMAIN=%s DEST=%s PORT=%s SHORTID=%s\n" "$REALITY_SUBDOMAIN" "$REALITY_DEST" "$REALITY_PORT" "$REALITY_SHORT_ID"
+    printf "SUBDOMAIN=%s DEST=%s PORT=%s SHORTID=%s XHTTPPATH=%s\n" "$REALITY_SUBDOMAIN" "$REALITY_DEST" "$REALITY_PORT" "$REALITY_SHORT_ID" "$REALITY_XHTTP_PATH"
   '
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"SUBDOMAIN=reality DEST=github.com PORT=20000 SHORTID=abcd1234abcd5678"* ]]
+  [[ "$output" == *"SUBDOMAIN=reality DEST=github.com PORT=20000 SHORTID=abcd1234abcd5678 XHTTPPATH=/api/v1/probe/abcd1234"* ]]
 }
 
 # ---------------------------------------------------------------------------
@@ -1242,6 +1247,7 @@ cf_real_ip_env() {
   REALITY_DEST="github.com"
   REALITY_PUBLIC_KEY="reality-pub-stub"
   REALITY_SHORT_ID="abcd1234"
+  REALITY_XHTTP_PATH="/api/v1/probe/abcd1234"
 
   run print_client_links
   [ "$status" -eq 0 ]
@@ -1251,7 +1257,10 @@ cf_real_ip_env() {
   [[ "$output" == *"Public key: reality-pub-stub"* ]]
   [[ "$output" == *"Short ID: abcd1234"* ]]
   [[ "$output" == *"SNI (impersonating): github.com"* ]]
+  [[ "$output" == *"Transport: xhttp"* ]]
+  [[ "$output" == *"Path: /api/v1/probe/abcd1234"* ]]
   [[ "$output" != *"vless://"* ]]
+  [[ "$output" != *"xtls-rprx-vision"* ]]
 }
 
 @test "print_client_links omits the Reality section when disabled" {
@@ -1628,12 +1637,15 @@ print_summary_env() {
   REALITY_SUBDOMAIN="reality"
   REALITY_DEST="github.com"
   REALITY_PORT="20000"
+  REALITY_XHTTP_PATH="/api/v1/probe/abcd1234"
 
   run print_summary
   [ "$status" -eq 0 ]
   [[ "$output" == *"VLESS Reality (direct connection, no CDN):"* ]]
   [[ "$output" == *"domain: reality.example.com"* ]]
   [[ "$output" == *"impersonating: github.com"* ]]
+  [[ "$output" == *"network: xhttp"* ]]
+  [[ "$output" == *"path: /api/v1/probe/abcd1234"* ]]
   [[ "$output" == *"20000/tcp"* ]]
 }
 
@@ -1783,12 +1795,23 @@ print_summary_env() {
   [[ "$output" == *"'shortIds': [os.environ['REALITY_SHORT_ID_ARG']]"* ]]
 }
 
-@test "ensure_reality_inbound passes flow xtls-rprx-vision and leaves decryption at none" {
+@test "ensure_reality_inbound uses XHTTP transport with the generated path, not RAW" {
+  local installer="${BATS_TEST_DIRNAME}/../setup.sh"
+
+  run grep -A70 '^ensure_reality_inbound()' "$installer"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"'network': 'xhttp'"* ]]
+  [[ "$output" == *"'xhttpSettings': {'path': os.environ['REALITY_XHTTP_PATH_ARG']}"* ]]
+  [[ "$output" != *"'network': 'tcp'"* ]]
+}
+
+@test "ensure_reality_inbound does not pass an XTLS Vision flow (RAW-only, incompatible with XHTTP)" {
   local installer="${BATS_TEST_DIRNAME}/../setup.sh"
 
   run grep 'xui_add_inbound "\$REALITY_PORT"' "$installer"
   [ "$status" -eq 0 ]
-  [[ "$output" == *'"none" "xtls-rprx-vision"'* ]]
+  [[ "$output" != *"xtls-rprx-vision"* ]]
+  [[ "$output" == *'"client" "none"'* ]]
 }
 
 @test "ensure_hysteria_host advertises the public Hysteria2 host through 3x-ui's Hosts API" {
@@ -3038,6 +3061,14 @@ run_stream_write_nginx_config() {
   SUB_PATH="/${sub_words[RANDOM % ${#sub_words[@]}]}/$(openssl rand -hex 6)"
 
   [[ "$SUB_PATH" =~ ^/[a-z]+/[0-9a-f]{12}$ ]]
+}
+
+@test "auto-generated REALITY_XHTTP_PATH looks like a real API endpoint" {
+  REALITY_XHTTP_PATH=""
+  local reality_xhttp_words=(session probe status metrics collect)
+  REALITY_XHTTP_PATH="/api/v$(( RANDOM % 3 + 1 ))/${reality_xhttp_words[RANDOM % ${#reality_xhttp_words[@]}]}/$(openssl rand -hex 4)"
+
+  [[ "$REALITY_XHTTP_PATH" =~ ^/api/v[123]/[a-z]+/[0-9a-f]{8}$ ]]
 }
 
 # ---------------------------------------------------------------------------

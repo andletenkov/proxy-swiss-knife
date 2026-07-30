@@ -46,6 +46,11 @@ REALITY_PORT=""
 REALITY_SHORT_ID=""
 REALITY_PRIVATE_KEY=""
 REALITY_PUBLIC_KEY=""
+# Reality's inbound uses XHTTP transport (not raw TCP+Vision): XHTTP's
+# HTTP/2-shaped request/response framing is harder for DPI to distinguish
+# from ordinary browsing than RAW's single long-lived TCP stream. The path
+# is auto-generated the same way WS_PATH/XHTTP_PATH are (see collect_input).
+REALITY_XHTTP_PATH=""
 
 # Optional NaiveProxy deployment (Caddy + forwardproxy, direct connection,
 # no CDN). Blank NAIVE_SUBDOMAIN disables the feature entirely. Reuses the
@@ -201,6 +206,7 @@ REALITY_SUBDOMAIN="${REALITY_SUBDOMAIN}"
 REALITY_DEST="${REALITY_DEST}"
 REALITY_PORT="${REALITY_PORT}"
 REALITY_SHORT_ID="${REALITY_SHORT_ID}"
+REALITY_XHTTP_PATH="${REALITY_XHTTP_PATH}"
 REALITY_PRIVATE_KEY="${REALITY_PRIVATE_KEY}"
 REALITY_PUBLIC_KEY="${REALITY_PUBLIC_KEY}"
 NAIVE_SUBDOMAIN="${NAIVE_SUBDOMAIN}"
@@ -856,6 +862,10 @@ collect_input() {
     local sub_words=(download resources assets static content files docs)
     SUB_PATH="/${sub_words[RANDOM % ${#sub_words[@]}]}/$(openssl rand -hex 6)"
   fi
+  if [[ -z "$REALITY_XHTTP_PATH" ]]; then
+    local reality_xhttp_words=(session probe status metrics collect)
+    REALITY_XHTTP_PATH="/api/v$(( RANDOM % 3 + 1 ))/${reality_xhttp_words[RANDOM % ${#reality_xhttp_words[@]}]}/$(openssl rand -hex 4)"
+  fi
 
   if [[ -z "${CLOUDFLARE_API_TOKEN:-}" ]]; then
     echo
@@ -1042,6 +1052,8 @@ confirm_configuration() {
     echo "  public/client port: 443"
     echo "  internal Xray port: ${REALITY_PORT}"
     echo "  impersonating: ${REALITY_DEST}"
+    echo "  network: xhttp"
+    echo "  path: ${REALITY_XHTTP_PATH}"
     echo
   fi
 
@@ -2230,6 +2242,8 @@ print_summary() {
     echo "  public/client port: 443"
     echo "  internal Xray port: ${REALITY_PORT}"
     echo "  impersonating: ${REALITY_DEST}"
+    echo "  network: xhttp"
+    echo "  path: ${REALITY_XHTTP_PATH}"
     echo
   fi
 
@@ -2851,11 +2865,17 @@ ensure_reality_inbound() {
   # and has no CDN/reverse-proxy TLS termination in front of it.
   local stream_settings
   export REALITY_DEST_ARG="$REALITY_DEST" REALITY_SHORT_ID_ARG="$REALITY_SHORT_ID" \
-    REALITY_PRIVATE_KEY_ARG="$REALITY_PRIVATE_KEY" REALITY_PUBLIC_KEY_ARG="$REALITY_PUBLIC_KEY"
+    REALITY_PRIVATE_KEY_ARG="$REALITY_PRIVATE_KEY" REALITY_PUBLIC_KEY_ARG="$REALITY_PUBLIC_KEY" \
+    REALITY_XHTTP_PATH_ARG="$REALITY_XHTTP_PATH"
   stream_settings="$(python3 << 'REALITYEOF'
 import json,os
+# XHTTP instead of RAW: an HTTP/2-request/response-shaped stream is a
+# smaller behavioral outlier to DPI than one long-lived raw TCP connection.
+# XTLS Vision ('flow') is RAW-only and must NOT be set for XHTTP -- xui_add_
+# inbound is called below with an empty flow argument for that reason.
 settings = {
-    'network': 'tcp',
+    'network': 'xhttp',
+    'xhttpSettings': {'path': os.environ['REALITY_XHTTP_PATH_ARG']},
     'security': 'reality',
     'realitySettings': {
         'show': False,
@@ -2879,10 +2899,10 @@ print(json.dumps(settings))
 REALITYEOF
   )"
 
-  echo "Creating inbound '${tag}' (Reality, port ${REALITY_PORT}, impersonating ${REALITY_DEST})..." >&2
+  echo "Creating inbound '${tag}' (Reality, port ${REALITY_PORT}, impersonating ${REALITY_DEST}, XHTTP path ${REALITY_XHTTP_PATH})..." >&2
   local _flag
   _flag="$(detect_country_flag)"
-  xui_add_inbound "$REALITY_PORT" "$tag" "${INBOUND_REMARK_REALITY:-${_flag} Reality}" "$stream_settings" "client" "none" "xtls-rprx-vision"
+  xui_add_inbound "$REALITY_PORT" "$tag" "${INBOUND_REMARK_REALITY:-${_flag} Reality}" "$stream_settings" "client" "none"
 }
 
 # Looks up an inbound's numeric DB id by tag (falling back to port, same
@@ -3478,7 +3498,8 @@ print_client_links() {
     echo "  Public key: ${REALITY_PUBLIC_KEY}"
     echo "  Short ID: ${REALITY_SHORT_ID}"
     echo "  SNI (impersonating): ${REALITY_DEST}"
-    echo "  Flow: xtls-rprx-vision"
+    echo "  Transport: xhttp"
+    echo "  Path: ${REALITY_XHTTP_PATH}"
     echo "  Fingerprint: chrome"
     echo "  (use the subscription above for a ready-to-import vless:// link)"
   fi
