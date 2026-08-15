@@ -40,6 +40,20 @@ VLESS_ENCRYPTION_CLIENT_KEY=""
 # REALITY_SUBDOMAIN disables the feature entirely. REALITY_DEST is the real,
 # unrelated donor site Reality impersonates for anyone without valid
 # credentials -- never a domain of BASE_DOMAIN itself.
+#
+# REALITY_DEST accepts a COMMA-SEPARATED list of donor names, e.g.
+# "cloudflare.com,www.cloudflare.com". Every name is published as an accepted
+# SNI (realitySettings.serverNames) AND gets its own key in the Nginx SNI
+# Guard map, so a client may use any one of them. Keeping those two layers in
+# sync is the whole point of deriving both from this single variable: an SNI
+# accepted by Xray but missing from the map silently lands on the decoy, which
+# surfaces to the user as an opaque certificate-mismatch error.
+#
+# The FIRST name is also the relay target (realitySettings.target). Reality
+# forwards an unauthenticated ClientHello verbatim -- including the SNI the
+# client chose -- so the target host must serve a valid certificate for every
+# name in the list. That is why validate_inputs requires them to share one
+# registrable domain.
 REALITY_SUBDOMAIN=""
 REALITY_DEST=""
 REALITY_PORT=""
@@ -615,11 +629,35 @@ validate_inputs() {
     [[ -n "$REALITY_DEST" ]] ||
       die "REALITY_DEST (donor site to impersonate, e.g. github.com) is required when a Reality subdomain is set."
 
-    [[ "$REALITY_DEST" =~ ^([A-Za-z0-9-]+\.)+[A-Za-z]{2,}$ ]] ||
-      die "Invalid Reality donor site '${REALITY_DEST}' (expected a plain hostname, e.g. github.com)."
+    # REALITY_DEST is a comma-separated donor list; validate every element and
+    # reject the mistakes that would otherwise fail silently at connect time.
+    local reality_name reality_seen="" reality_registrable="" reality_this_registrable
+    while IFS= read -r reality_name; do
+      [[ -n "$reality_name" ]] ||
+        die "REALITY_DEST contains an empty donor name -- check for a stray or trailing comma in '${REALITY_DEST}'."
 
-    [[ "$REALITY_DEST" != "$BASE_DOMAIN" && "$REALITY_DEST" != *".${BASE_DOMAIN}" ]] ||
-      die "Reality donor site must not be ${BASE_DOMAIN} or a subdomain of it -- it must be a real, unrelated third-party site."
+      [[ "$reality_name" =~ ^([A-Za-z0-9-]+\.)+[A-Za-z]{2,}$ ]] ||
+        die "Invalid Reality donor site '${reality_name}' (expected a plain hostname, e.g. github.com)."
+
+      [[ "$reality_name" != "$BASE_DOMAIN" && "$reality_name" != *".${BASE_DOMAIN}" ]] ||
+        die "Reality donor site must not be ${BASE_DOMAIN} or a subdomain of it -- it must be a real, unrelated third-party site."
+
+      [[ "$reality_seen" != *"|${reality_name}|"* ]] ||
+        die "Reality donor site '${reality_name}' is listed twice in REALITY_DEST."
+      reality_seen+="|${reality_name}|"
+
+      # All names must sit under one registrable domain. Reality relays the
+      # client's ClientHello unchanged, so a target that cannot serve every
+      # advertised SNI hands probers a certificate mismatch and destroys the
+      # camouflage this whole feature exists to provide.
+      reality_this_registrable="$(reality_registrable_domain "$reality_name")"
+      if [[ -z "$reality_registrable" ]]; then
+        reality_registrable="$reality_this_registrable"
+      else
+        [[ "$reality_this_registrable" == "$reality_registrable" ]] ||
+          die "All REALITY_DEST names must share one registrable domain (got '${reality_registrable}' and '${reality_this_registrable}') -- the first name is the relay target and must serve a valid certificate for every other name."
+      fi
+    done < <(reality_dest_names)
 
     validate_port "Reality port" "$REALITY_PORT"
 
@@ -895,7 +933,10 @@ collect_input() {
     prompt_optional REALITY_SUBDOMAIN "Reality subdomain (DNS-only, e.g. reality)" "$REALITY_SUBDOMAIN"
 
   if [[ -n "$REALITY_SUBDOMAIN" ]]; then
-    prompt REALITY_DEST "Real site for Reality to impersonate (e.g. github.com)" "$REALITY_DEST"
+    echo "  Multiple names may be given, comma-separated (e.g. cloudflare.com,www.cloudflare.com);"
+    echo "  clients may then use any one of them as SNI. The first name is also the relay"
+    echo "  target, so all names must belong to the same site."
+    prompt REALITY_DEST "Real site(s) for Reality to impersonate (e.g. github.com)" "$REALITY_DEST"
 
     REALITY_PORT="${REALITY_PORT:-$(random_free_port "443" "$SUB_PORT" "$WS_PORT" "$GRPC_PORT" "$XHTTP_PORT" "$PANEL_PORT")}"
     validate_port "Reality port" "$REALITY_PORT"
@@ -1051,7 +1092,8 @@ confirm_configuration() {
     echo "  domain: ${REALITY_SUBDOMAIN}.${BASE_DOMAIN} (DNS-only/grey-cloud -- do NOT enable the Cloudflare proxy for this record)"
     echo "  public/client port: 443"
     echo "  internal Xray port: ${REALITY_PORT}"
-    echo "  impersonating: ${REALITY_DEST}"
+    echo "  impersonating (accepted SNI, use any one): ${REALITY_DEST}"
+    echo "  relay target: $(reality_primary_dest):443"
     echo "  network: xhttp"
     echo "  path: ${REALITY_XHTTP_PATH}"
     echo
@@ -1686,6 +1728,44 @@ unensure_nginx_stream_context() {
 
 # Generates the stream{} SNI Guard: routes port 443 traffic by SNI to the
 # CDN inbounds (unchanged Nginx http server blocks, now on loopback), the
+# Splits REALITY_DEST's comma-separated donor list into one name per line,
+# trimming surrounding whitespace so "a.com, b.com" behaves like "a.com,b.com".
+# Empty elements are preserved so validate_inputs can reject stray commas
+# rather than silently dropping them.
+reality_dest_names() {
+  local IFS=','
+  local name
+  for name in ${REALITY_DEST}; do
+    printf '%s\n' "${name//[[:space:]]/}"
+  done
+}
+
+# The relay target: the first donor name. See the REALITY_DEST comment block.
+reality_primary_dest() {
+  reality_dest_names | head -n 1
+}
+
+# Last two labels of a hostname -- a deliberately simple stand-in for a real
+# public-suffix lookup. It is enough to catch the failure mode that matters
+# (mixing unrelated donors such as cloudflare.com and www.microsoft.com) while
+# staying dependency-free. It over-rejects legitimate cross-domain donor sets
+# (apple.com/icloud.com); those remain configurable by editing the inbound.
+# Implemented with parameter expansion rather than awk: a '$(' sequence inside
+# an awk program's single quotes trips bash 3.2's parser, and setup.sh stays
+# parseable there.
+reality_registrable_domain() {
+  local host="$1"
+  local last="${host##*.}"
+  local rest="${host%.*}"
+
+  if [[ "$rest" == "$host" ]]; then
+    printf '%s\n' "$host"
+    return
+  fi
+
+  printf '%s.%s\n' "${rest##*.}" "$last"
+}
+
 # NaiveProxy/Reality direct-connection backends, or a decoy vhost for any
 # other SNI. Only called when Reality or NaiveProxy is enabled.
 write_nginx_stream_config() {
@@ -1701,7 +1781,15 @@ write_nginx_stream_config() {
     echo "    ${panel_domain}    cdn;"
     [[ "$INSTALL_MODE" != "cdn" ]] || echo "    ${vless_domain}    cdn;"
     [[ -z "$naive_domain" ]] || echo "    ${naive_domain}    naive;"
-    [[ -z "$REALITY_SUBDOMAIN" ]] || echo "    ${REALITY_DEST}    reality;"
+    if [[ -n "$REALITY_SUBDOMAIN" ]]; then
+      # One map key per donor name: Xray accepts any of them as SNI, so the
+      # guard must route all of them too, or the unmapped ones fall through to
+      # the decoy and fail with a confusing certificate error.
+      local reality_sni
+      while IFS= read -r reality_sni; do
+        [[ -z "$reality_sni" ]] || echo "    ${reality_sni}    reality;"
+      done < <(reality_dest_names)
+    fi
     echo "    default    decoy;"
     echo "}"
     echo
@@ -2241,7 +2329,8 @@ print_summary() {
     echo "  domain: ${REALITY_SUBDOMAIN}.${BASE_DOMAIN}"
     echo "  public/client port: 443"
     echo "  internal Xray port: ${REALITY_PORT}"
-    echo "  impersonating: ${REALITY_DEST}"
+    echo "  impersonating (accepted SNI, use any one): ${REALITY_DEST}"
+    echo "  relay target: $(reality_primary_dest):443"
     echo "  network: xhttp"
     echo "  path: ${REALITY_XHTTP_PATH}"
     echo
@@ -2879,9 +2968,15 @@ settings = {
     'security': 'reality',
     'realitySettings': {
         'show': False,
-        'target': f"{os.environ['REALITY_DEST_ARG']}:443",
+        # REALITY_DEST_ARG is the comma-separated donor list. Every name is an
+        # accepted SNI; the first is the relay target (see the REALITY_DEST
+        # comment block in setup.sh). write_nginx_stream_config emits a matching
+        # SNI Guard key for each one -- the two must never diverge.
+        # NOTE: no apostrophes in this heredoc. It is nested inside a $( )
+        # command substitution, where bash 3.2 still scans for quote pairs.
+        'target': f"{os.environ['REALITY_DEST_ARG'].split(',')[0]}:443",
         'xver': 0,
-        'serverNames': [os.environ['REALITY_DEST_ARG']],
+        'serverNames': os.environ['REALITY_DEST_ARG'].split(','),
         'privateKey': os.environ['REALITY_PRIVATE_KEY_ARG'],
         'shortIds': [os.environ['REALITY_SHORT_ID_ARG']],
         # The 3x-ui panel UI and subscription link generator (applyShareRealityParams)
@@ -3497,7 +3592,7 @@ print_client_links() {
     echo "  UUID: ${CLIENT_UUID}"
     echo "  Public key: ${REALITY_PUBLIC_KEY}"
     echo "  Short ID: ${REALITY_SHORT_ID}"
-    echo "  SNI (impersonating): ${REALITY_DEST}"
+    echo "  SNI (impersonating -- any one of these): ${REALITY_DEST}"
     echo "  Transport: xhttp"
     echo "  Path: ${REALITY_XHTTP_PATH}"
     echo "  Fingerprint: chrome"
@@ -3544,12 +3639,46 @@ print_client_links() {
     echo "    {\"profiles\":[{\"profileName\":\"default\",\"servers\":[{\"ipAddress\":\"${MIERU_SUBDOMAIN}.${BASE_DOMAIN}\",\"portBindings\":[${client_bindings_json}]}],\"user\":{\"name\":\"${MIERU_USERNAME}\",\"password\":\"${MIERU_PASSWORD}\"},\"mtu\":1400}],\"activeProfile\":\"default\"}"
   fi
 
-  if [[ -n "$NAIVE_SUBDOMAIN" || -n "$MIERU_SUBDOMAIN" ]]; then
+  if [[ -n "$NAIVE_SUBDOMAIN" || -n "$MIERU_SUBDOMAIN" || -n "$REALITY_SUBDOMAIN" || -n "$HYSTERIA_SUBDOMAIN" ]]; then
     local karing_flag
     karing_flag="$(detect_country_flag)"
     echo
-    echo "=== Karing proxy config (YAML) ==="
+    echo "=== Karing / Clash-Meta proxy config (YAML) ==="
+    echo "# Every direct transport in one place. Reality and Hysteria2 are also"
+    echo "# available via the 3x-ui subscription above, which stays in sync with"
+    echo "# the live inbounds automatically; this block is a convenience copy for"
+    echo "# clients that take a YAML proxies list instead of a subscription URL."
     echo "proxies:"
+    if [[ -n "$REALITY_SUBDOMAIN" ]]; then
+      # servername must be ONE of REALITY_DEST's names; the first is used here
+      # because it is also the relay target, so it is guaranteed serviceable.
+      echo "  - name: \"${karing_flag} VLESS Reality (${REALITY_SUBDOMAIN}.${BASE_DOMAIN}:443)\""
+      echo "    type: vless"
+      echo "    server: ${REALITY_SUBDOMAIN}.${BASE_DOMAIN}"
+      echo "    port: 443"
+      echo "    uuid: ${CLIENT_UUID}"
+      echo "    network: xhttp"
+      echo "    xhttp-opts:"
+      echo "      path: ${REALITY_XHTTP_PATH}"
+      echo "    tls: true"
+      echo "    udp: true"
+      echo "    servername: $(reality_primary_dest)"
+      echo "    client-fingerprint: chrome"
+      echo "    reality-opts:"
+      echo "      public-key: ${REALITY_PUBLIC_KEY}"
+      echo "      short-id: ${REALITY_SHORT_ID}"
+    fi
+    if [[ -n "$HYSTERIA_SUBDOMAIN" ]]; then
+      echo "  - name: \"${karing_flag} Hysteria2 (${HYSTERIA_SUBDOMAIN}.${BASE_DOMAIN}:${HYSTERIA_PORT})\""
+      echo "    type: hysteria2"
+      echo "    server: ${HYSTERIA_SUBDOMAIN}.${BASE_DOMAIN}"
+      echo "    port: ${HYSTERIA_PORT}"
+      echo "    password: ${HYSTERIA_AUTH}"
+      echo "    obfs: salamander"
+      echo "    obfs-password: ${HYSTERIA_OBFS_PASSWORD}"
+      echo "    sni: ${HYSTERIA_SUBDOMAIN}.${BASE_DOMAIN}"
+      echo "    udp: true"
+    fi
     if [[ -n "$NAIVE_SUBDOMAIN" ]]; then
       echo "  - name: \"${karing_flag} NaiveProxy (${NAIVE_SUBDOMAIN}.${BASE_DOMAIN}:443)\""
       echo "    type: naive"

@@ -527,6 +527,62 @@ valid_inputs() {
   [[ "$output" == *"must be a real, unrelated third-party site"* ]]
 }
 
+@test "validate_inputs accepts a comma-separated Reality donor list" {
+  valid_inputs
+  REALITY_SUBDOMAIN="reality"
+  REALITY_DEST="cloudflare.com,www.cloudflare.com"
+  REALITY_PORT="20000"
+  run validate_inputs
+  [ "$status" -eq 0 ]
+}
+
+@test "validate_inputs rejects an empty element in the Reality donor list" {
+  valid_inputs
+  REALITY_SUBDOMAIN="reality"
+  REALITY_DEST="cloudflare.com,,www.cloudflare.com"
+  REALITY_PORT="20000"
+  run validate_inputs
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"empty donor name"* ]]
+}
+
+@test "validate_inputs rejects a duplicated Reality donor name" {
+  valid_inputs
+  REALITY_SUBDOMAIN="reality"
+  REALITY_DEST="cloudflare.com,cloudflare.com"
+  REALITY_PORT="20000"
+  run validate_inputs
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"listed twice"* ]]
+}
+
+@test "validate_inputs rejects Reality donor names from different registrable domains" {
+  valid_inputs
+  REALITY_SUBDOMAIN="reality"
+  REALITY_DEST="cloudflare.com,www.microsoft.com"
+  REALITY_PORT="20000"
+  run validate_inputs
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"must share one registrable domain"* ]]
+}
+
+@test "validate_inputs rejects the base domain anywhere in the Reality donor list" {
+  valid_inputs
+  REALITY_SUBDOMAIN="reality"
+  REALITY_DEST="cloudflare.com,sneaky.${BASE_DOMAIN}"
+  REALITY_PORT="20000"
+  run validate_inputs
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"must be a real, unrelated third-party site"* ]]
+}
+
+@test "reality_primary_dest returns the first donor name as the relay target" {
+  REALITY_DEST="cloudflare.com, www.cloudflare.com"
+  run reality_primary_dest
+  [ "$status" -eq 0 ]
+  [[ "$output" == "cloudflare.com" ]]
+}
+
 @test "validate_inputs rejects a Reality port colliding with another internal port" {
   valid_inputs
   REALITY_SUBDOMAIN="reality"
@@ -1790,8 +1846,8 @@ print_summary_env() {
   run grep -A70 '^ensure_reality_inbound()' "$installer"
   [ "$status" -eq 0 ]
   [[ "$output" == *"'security': 'reality'"* ]]
-  [[ "$output" == *"'target': f\"{os.environ['REALITY_DEST_ARG']}:443\""* ]]
-  [[ "$output" == *"'serverNames': [os.environ['REALITY_DEST_ARG']]"* ]]
+  [[ "$output" == *"'target': f\"{os.environ['REALITY_DEST_ARG'].split(',')[0]}:443\""* ]]
+  [[ "$output" == *"'serverNames': os.environ['REALITY_DEST_ARG'].split(',')"* ]]
   [[ "$output" == *"'shortIds': [os.environ['REALITY_SHORT_ID_ARG']]"* ]]
 }
 
@@ -2946,6 +3002,20 @@ run_stream_write_nginx_config() {
   grep -q "upstream reality { server 127.0.0.1:20000; }" "$NGINX_STREAM_CONF"
   grep -q "listen 443 reuseport;" "$NGINX_STREAM_CONF"
   grep -q "ssl_preread on;" "$NGINX_STREAM_CONF"
+}
+
+@test "write_nginx_stream_config emits one SNI map key per Reality donor name" {
+  nginx_stream_env
+  REALITY_DEST="cloudflare.com,www.cloudflare.com"
+  run write_nginx_stream_config
+  [ "$status" -eq 0 ]
+
+  # Both names must route to reality: an SNI that Xray accepts but the guard
+  # does not map falls through to the decoy and fails with a cert mismatch.
+  grep -q "cloudflare.com    reality;" "$NGINX_STREAM_CONF"
+  grep -q "www.cloudflare.com    reality;" "$NGINX_STREAM_CONF"
+  grep -q "default    decoy;" "$NGINX_STREAM_CONF"
+  [ "$(grep -c "reality;" "$NGINX_STREAM_CONF")" -eq 2 ]
 }
 
 @test "write_nginx_config's stream map omits naive/reality branches when only one is enabled" {
