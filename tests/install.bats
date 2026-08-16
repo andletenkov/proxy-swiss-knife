@@ -576,6 +576,43 @@ valid_inputs() {
   [[ "$output" == *"must be a real, unrelated third-party site"* ]]
 }
 
+@test "validate_inputs accepts a supported Reality uTLS fingerprint" {
+  valid_inputs
+  REALITY_SUBDOMAIN="reality"
+  REALITY_DEST="github.com"
+  REALITY_PORT="20000"
+  REALITY_FINGERPRINT="firefox"
+  run validate_inputs
+  [ "$status" -eq 0 ]
+}
+
+@test "validate_inputs rejects an unknown Reality uTLS fingerprint" {
+  valid_inputs
+  REALITY_SUBDOMAIN="reality"
+  REALITY_DEST="github.com"
+  REALITY_PORT="20000"
+  REALITY_FINGERPRINT="netscape"
+  run validate_inputs
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Invalid REALITY_FINGERPRINT"* ]]
+}
+
+@test "Reality uTLS fingerprint defaults to firefox, not chrome" {
+  # Chrome's ClientHello can exceed one TCP segment and stall behind the
+  # SNI Guard's ssl_preread; firefox is the safe default here.
+  local installer="${BATS_TEST_DIRNAME}/../setup.sh"
+
+  run grep -n 'REALITY_FINGERPRINT_DEFAULT=' "$installer"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"firefox"'* ]]
+
+  # The Reality inbound must read the variable, never a literal.
+  run grep -A70 '^ensure_reality_inbound()' "$installer"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"'fingerprint': os.environ['REALITY_FINGERPRINT_ARG']"* ]]
+  [[ "$output" != *"'fingerprint': 'chrome'"* ]]
+}
+
 @test "reality_primary_dest returns the first donor name as the relay target" {
   REALITY_DEST="cloudflare.com, www.cloudflare.com"
   run reality_primary_dest

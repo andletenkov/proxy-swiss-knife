@@ -65,6 +65,19 @@ REALITY_PUBLIC_KEY=""
 # from ordinary browsing than RAW's single long-lived TCP stream. The path
 # is auto-generated the same way WS_PATH/XHTTP_PATH are (see collect_input).
 REALITY_XHTTP_PATH=""
+# uTLS fingerprint the Reality client impersonates. Defaults to firefox, NOT
+# chrome: Chrome's modern ClientHello carries a post-quantum key share that
+# pushes it past a single TCP segment, and a split ClientHello interacts badly
+# with the Nginx SNI Guard, which has to ssl_preread the SNI before it can
+# route the connection to Xray. Observed in practice as a connection that
+# establishes, reaches Reality, and then stalls -- indistinguishable from a
+# credential error. Firefox's ClientHello is smaller and fits in one segment.
+# Override only if you know the client you use needs a different profile.
+REALITY_FINGERPRINT=""
+REALITY_FINGERPRINT_DEFAULT="firefox"
+# uTLS profiles Xray accepts. Kept as a whitelist so a typo fails at input
+# time rather than silently producing an inbound no client can match.
+REALITY_FINGERPRINTS="chrome firefox safari ios android edge 360 qq random randomized"
 
 # Optional NaiveProxy deployment (Caddy + forwardproxy, direct connection,
 # no CDN). Blank NAIVE_SUBDOMAIN disables the feature entirely. Reuses the
@@ -221,6 +234,7 @@ REALITY_DEST="${REALITY_DEST}"
 REALITY_PORT="${REALITY_PORT}"
 REALITY_SHORT_ID="${REALITY_SHORT_ID}"
 REALITY_XHTTP_PATH="${REALITY_XHTTP_PATH}"
+REALITY_FINGERPRINT="${REALITY_FINGERPRINT}"
 REALITY_PRIVATE_KEY="${REALITY_PRIVATE_KEY}"
 REALITY_PUBLIC_KEY="${REALITY_PUBLIC_KEY}"
 NAIVE_SUBDOMAIN="${NAIVE_SUBDOMAIN}"
@@ -659,6 +673,11 @@ validate_inputs() {
       fi
     done < <(reality_dest_names)
 
+    if [[ -n "$REALITY_FINGERPRINT" ]]; then
+      [[ " ${REALITY_FINGERPRINTS} " == *" ${REALITY_FINGERPRINT} "* ]] ||
+        die "Invalid REALITY_FINGERPRINT '${REALITY_FINGERPRINT}' (expected one of: ${REALITY_FINGERPRINTS})."
+    fi
+
     validate_port "Reality port" "$REALITY_PORT"
 
     local reality_other_port
@@ -946,10 +965,12 @@ collect_input() {
     fi
 
     [[ -n "$REALITY_SHORT_ID" ]] || REALITY_SHORT_ID="$(openssl rand -hex 8)"
+    [[ -n "$REALITY_FINGERPRINT" ]] || REALITY_FINGERPRINT="$REALITY_FINGERPRINT_DEFAULT"
   else
     REALITY_DEST=""
     REALITY_PORT=""
     REALITY_SHORT_ID=""
+    REALITY_FINGERPRINT=""
   fi
 
   echo
@@ -2955,7 +2976,8 @@ ensure_reality_inbound() {
   local stream_settings
   export REALITY_DEST_ARG="$REALITY_DEST" REALITY_SHORT_ID_ARG="$REALITY_SHORT_ID" \
     REALITY_PRIVATE_KEY_ARG="$REALITY_PRIVATE_KEY" REALITY_PUBLIC_KEY_ARG="$REALITY_PUBLIC_KEY" \
-    REALITY_XHTTP_PATH_ARG="$REALITY_XHTTP_PATH"
+    REALITY_XHTTP_PATH_ARG="$REALITY_XHTTP_PATH" \
+    REALITY_FINGERPRINT_ARG="${REALITY_FINGERPRINT:-$REALITY_FINGERPRINT_DEFAULT}"
   stream_settings="$(python3 << 'REALITYEOF'
 import json,os
 # XHTTP instead of RAW: an HTTP/2-request/response-shaped stream is a
@@ -2985,7 +3007,7 @@ settings = {
         # key and produces subscription links silently missing pbk=.
         'settings': {
             'publicKey': os.environ['REALITY_PUBLIC_KEY_ARG'],
-            'fingerprint': 'chrome',
+            'fingerprint': os.environ['REALITY_FINGERPRINT_ARG'],
             'spiderX': '/',
         },
     },
@@ -3595,7 +3617,7 @@ print_client_links() {
     echo "  SNI (impersonating -- any one of these): ${REALITY_DEST}"
     echo "  Transport: xhttp"
     echo "  Path: ${REALITY_XHTTP_PATH}"
-    echo "  Fingerprint: chrome"
+    echo "  Fingerprint: ${REALITY_FINGERPRINT}"
     echo "  (use the subscription above for a ready-to-import vless:// link)"
   fi
 
@@ -3663,7 +3685,7 @@ print_client_links() {
       echo "    tls: true"
       echo "    udp: true"
       echo "    servername: $(reality_primary_dest)"
-      echo "    client-fingerprint: chrome"
+      echo "    client-fingerprint: ${REALITY_FINGERPRINT}"
       echo "    reality-opts:"
       echo "      public-key: ${REALITY_PUBLIC_KEY}"
       echo "      short-id: ${REALITY_SHORT_ID}"
